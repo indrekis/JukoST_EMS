@@ -67,7 +67,7 @@ segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C0
         dw 6000h, 6400h, 6800h, 6C00h
         dw 7000h, 7400h, 7800h, 7C00h
 
-%define B8000_DEBUG_TRACE 1
+; %define B8000_DEBUG_TRACE 1
 
 %ifdef B8000_DEBUG_TRACE
 dbg_pos db 0
@@ -538,7 +538,7 @@ int67_hndl:
 		mov		byte [cs:do_call_orig_int21], 1
 ;		DBG_MARK 'S'
 		call	int21_hndl
-		DBG_MARK 'R'
+;		DBG_MARK 'R'
 		mov	bx, cs
 		mov	ds, bx
 ;		assume ds:seg000
@@ -1195,7 +1195,9 @@ found_free_slot:
 		mov	[bx+di], cx	; Save backing page number for slot
 					; falls	through	to the next function
 
-sync_aliases:				
+sync_aliases:
+		DBG_MARK 'K'
+		
 		mov	si, EMS_slots_state ; Looks like	syncing	aliases	-- does	not analyzed thoroughly
 		mov	word [si], 0
 		mov	word [si+2], 0
@@ -1413,7 +1415,8 @@ short_ret1:
 		jmp	short exit_int21_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-copy_to_all_group1:			
+copy_to_all_group1:		
+;		DBG_MARK 'L'
 		mov	[cs:CRC_group1], ax
 		mov	ah, dl
 		xor	bx, bx
@@ -1452,7 +1455,8 @@ is_not_group2:
 		jmp	short exit_int21_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_6CE:				
+loc_6CE:			
+;		DBG_MARK 'M'	
 		mov	[cs:CRC_group2], ax
 		mov	ah, dl
 		xor	bx, bx
@@ -1470,6 +1474,7 @@ loc_6E6:
 		inc	bl
 		cmp	bl, 3
 		jbe	short loc_6D6
+		
 
 exit_int21_handler:		
 ;		DBG_MARK 'V'	
