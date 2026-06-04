@@ -4,13 +4,6 @@ bits 16
 cpu 8086
 org 0
 
-; ═══════════════════════════════════════════════════════════════════════════
-
-; Segment type:	Pure code
-; seg000		segment	byte public 'CODE' use16
-; 		assume cs:seg000
-;		assume es:nothing, ss:nothing, ds:nothing, fs:nothing, gs:nothing
-
 NextDevice_0	dw 0FFFFh		; The last device
 				dw 0FFFFh
 DevAttr_0		dw 0C000h		; supports IOCTL
@@ -278,17 +271,17 @@ loc_255:
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-found_free_backing_page:		; CODE XREF: Interrupt_Routine_0+B7j
+found_free_backing_page:		
 		inc	dl
 		jmp	short search_next_backing_page
 ; ───────────────────────────────────────────────────────────────────────────
 
-found_all_pages_1:			; CODE XREF: Interrupt_Routine_0+C2j
+found_all_pages_1:			
 		xor	si, si
 		mov	bx, 8
 		mov	di, EMS_logic_pages_tbl
 
-search_next_backing_id2:		; CODE XREF: Interrupt_Routine_0+E7j
+search_next_backing_id2:	
         cmp     bl, 36h
         ja      alloc_table_corrupt
 		
@@ -302,7 +295,7 @@ search_next_backing_id2:		; CODE XREF: Interrupt_Routine_0+E7j
 		cmp	si, ax
 		jz	short set_all_pages
 
-is_not_free1:				; CODE XREF: Interrupt_Routine_0+D6j
+is_not_free1:				
 		inc	bl
 		inc	bl
 		jmp	short search_next_backing_id2
@@ -428,7 +421,7 @@ EMS_fn07:				; Save Page Map
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_321:				; CODE XREF: Interrupt_Routine_0+17Ej
+loc_321:				
 		mov	dx, bx
 		call	check_handler
 		mov	bx, dx
@@ -441,7 +434,7 @@ loc_321:				; CODE XREF: Interrupt_Routine_0+17Ej
 		add	di, bx
 		xor	bx, bx
 
-save_next1:				; CODE XREF: Interrupt_Routine_0+1ADj
+save_next1:				
 		mov	ax, [cs:bx+si]
 		mov	[cs:bx+di], ax
 		inc	bl
@@ -477,7 +470,7 @@ loc_361:
 		add	si, bx
 		xor	bx, bx
 
-restore_next1:			; CODE XREF: Interrupt_Routine_0+1F2j
+restore_next1:			
 		mov	dx, [cs:bx+si]
 		mov	al, bl
 		shr	al, 1
@@ -515,7 +508,7 @@ EMS_fn0B:				; "Get EMM Handle Count" according to the standart.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_3A7:				; CODE XREF: Interrupt_Routine_0+204j
+loc_3A7:				
 		xor	dh, dh
 		mov	[bp+0Ah], dx	; Return to BX
 		xor	ax, ax
@@ -540,7 +533,7 @@ EMS_fn0D:				; Get All EMM Handle Pages
 		mov	[bp+0Ah], ax	; Return into BX
 		mov	al, 1
 
-loc_3CD:				; CODE XREF: Interrupt_Routine_0+246j
+loc_3CD:				
 		call	calc_pages_for_handler
 		or	dl, dl
 		jz	short loc_3DE
@@ -551,7 +544,7 @@ loc_3CD:				; CODE XREF: Interrupt_Routine_0+246j
 		inc	si
 		inc	si
 
-loc_3DE:				; CODE XREF: Interrupt_Routine_0+236j
+loc_3DE:				
 		inc	al
 		cmp	al, 1Ch
 		jbe	short loc_3CD
@@ -582,7 +575,7 @@ EMS_fn0E:				; Many functions, code from AL was saved in AL
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-loc_3F9:				; CODE XREF: Interrupt_Routine_0+252j
+loc_3F9:				
 		cmp	al, 1
 		jnz	short loc_406
 		call	set_page_map
@@ -591,7 +584,7 @@ loc_3F9:				; CODE XREF: Interrupt_Routine_0+252j
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-loc_406:				; CODE XREF: Interrupt_Routine_0+25Fj
+loc_406:				
 		cmp	al, 2
 		jnz	short loc_416
 		call	get_page_map
@@ -601,7 +594,7 @@ loc_406:				; CODE XREF: Interrupt_Routine_0+25Fj
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-loc_416:				; CODE XREF: Interrupt_Routine_0+26Cj
+loc_416:			
 		cmp	al, 3
 		jnz	short loc_420
 		mov	ax, 8
@@ -609,19 +602,17 @@ loc_416:				; CODE XREF: Interrupt_Routine_0+26Cj
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-loc_420:				; CODE XREF: Interrupt_Routine_0+27Cj
-		mov	ah, 8Fh	; 'П'   ; undefined subfunction
+loc_420:			
+		mov	ah, 8Fh	; undefined subfunction
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-exit_int67_handler_err:			; CODE XREF: Interrupt_Routine_0:short_exit_int67j
-					; Interrupt_Routine_0:EMS_fn09_fn0Aj
-		mov	ah, 84h	; 'Д'   ; 0x84: unsupported function
+exit_int67_handler_err:			
+		mov	ah, 84h	; 0x84: unsupported function
 					; https://www.lo-tech.co.uk/wiki/LIM_Expanded_Memory_Specification_V4:_Appendix_A
 
-exit_int67_handler:			; CODE XREF: Interrupt_Routine_0+66j
-					; Interrupt_Routine_0+70j ...
+exit_int67_handler:			
 		pop	bp
 		pop	di
 		pop	si
@@ -634,18 +625,17 @@ exit_int67_handler:			; CODE XREF: Interrupt_Routine_0+66j
 		iret
 ; ───────────────────────────────────────────────────────────────────────────
 
-calc_free_pages:			; CODE XREF: Interrupt_Routine_0+78p
-					; Interrupt_Routine_0:allocate_page1p
+calc_free_pages:			
 		mov	di, EMS_logic_pages_tbl
 		xor	si, si
 		mov	bx, 8
 
-cont_calc_freepg:			; CODE XREF: Interrupt_Routine_0+2AAj
+cont_calc_freepg:			
 		cmp	byte [cs:bx+di], 0FFh
 		jnz	short not_free_page1
 		inc	si
 
-not_free_page1:			; CODE XREF: Interrupt_Routine_0+2A0j
+not_free_page1:			
 		inc	bl
 		inc	bl
 		cmp	bl, 36h	; '6'   ; 36h/2 = 18h = 27, останн_й елемент
@@ -653,21 +643,19 @@ not_free_page1:			; CODE XREF: Interrupt_Routine_0+2A0j
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-calc_pages_for_handler:			; CODE XREF: Interrupt_Routine_0+103p
-					; Interrupt_Routine_0+1FFp ...
+calc_pages_for_handler:			
 		mov	di, EMS_logic_pages_tbl
 		mov	bx, 8
 		xor	dl, dl
 
-cont_calc1:				; CODE XREF: Interrupt_Routine_0+2CAj
+cont_calc1:				
 		cmp	[cs:bx+di+1], al ; Handle in AL; handler in +1 offset in table
 		jnz	short not_found1
 		cmp	byte [cs:bx+di], 0FFh
 		jz	short not_found1
 		inc	dl
 
-not_found1:				; CODE XREF: Interrupt_Routine_0+2B9j
-					; Interrupt_Routine_0+2BFj
+not_found1:				
 		inc	bl
 		inc	bl
 		cmp	bl, 36h	; '6'   ; Until the table end
@@ -675,16 +663,15 @@ not_found1:				; CODE XREF: Interrupt_Routine_0+2B9j
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-count_active_handlers:			; CODE XREF: Interrupt_Routine_0:EMS_fn0Cp
-					; Interrupt_Routine_0+225p
+count_active_handlers:			
 		xor	al, al		; AL - result
 		mov	di, EMS_logic_pages_tbl
 		mov	cl, 1
 
-cont_calc2:				; CODE XREF: Interrupt_Routine_0+2F4j
+cont_calc2:				
 		mov	bx, 8
 
-cont_search1:				; CODE XREF: Interrupt_Routine_0+2EDj
+cont_search1:			
 		cmp	[cs:bx+di+1], cl ; Has handler equal to	CL
 		jnz	short not_our_handler
 		cmp	byte [cs:bx+di], 0FFh ; Is it free?
@@ -693,21 +680,20 @@ cont_search1:				; CODE XREF: Interrupt_Routine_0+2EDj
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-not_our_handler:			; CODE XREF: Interrupt_Routine_0+2DBj
-					; Interrupt_Routine_0+2E1j
+not_our_handler:			
 		inc	bl
 		inc	bl
 		cmp	bl, 36h	; '6'   ;  Until the table end
 		jbe	short cont_search1
 
-to_next_handler:			; CODE XREF: Interrupt_Routine_0+2F9j
+to_next_handler:			
 		inc	cl
 		cmp	cl, 1Ch		; 28 decimal...
 		jbe	short cont_calc2
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-inc_AL:				; CODE XREF: Interrupt_Routine_0+2E3j
+inc_AL:				
 		inc	al
 		jmp	short to_next_handler
 ; ───────────────────────────────────────────────────────────────────────────
@@ -754,7 +740,7 @@ To_next_handler2:
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-we_found_entry1:			; CODE XREF: Interrupt_Routine_0+30Fj
+we_found_entry1:			
 		shr	bl, 1
 		mov	ah, bl		; AH - page index
 		mov	bl, al		; BL - destination slot
@@ -763,7 +749,7 @@ we_found_entry1:			; CODE XREF: Interrupt_Routine_0+30Fj
 		mov	al, bl		; AL - destination slot
 		xor	bx, bx
 
-to_next_slot1:			; CODE XREF: Interrupt_Routine_0+368j
+to_next_slot1:			
 		mov	di, EMS_logic_pages_tbl
 		mov	si, segs_for_EMS_frames
 		mov	dx, [cs:bx+di]
@@ -794,7 +780,7 @@ loc_4DC_not_found:
         jmp     found_free_slot
 ; ───────────────────────────────────────────────────────────────────────────
 
-found_corresp_phys_page:		; CODE XREF: Interrupt_Routine_0+343j
+found_corresp_phys_page:		
 		mov	es, word [cs:bx+si]
 		mov	bl, cl
 		mov	ds, word [cs:bx+si]
@@ -805,7 +791,7 @@ found_corresp_phys_page:		; CODE XREF: Interrupt_Routine_0+343j
 		rep movsw
         mov     bx, [cs:temp_phys_EMS_slot]
 
-found_free_slot:			; CODE XREF: Interrupt_Routine_0+335j
+found_free_slot:			
 		inc	bl
 		inc	bl
 		cmp	bl, 6
@@ -838,7 +824,7 @@ found_free_slot:			; CODE XREF: Interrupt_Routine_0+335j
 		mov	[bx+di], cx	; Save backing page number for slot
 					; falls	through	to the next function
 
-sync_aliases:				; CODE XREF: Interrupt_Routine_0:loc_302p
+sync_aliases:				
 		mov	si, EMS_slots_state ; Looks like	syncing	aliases	-- does	not analyzed thoroughly
 		mov	word [si], 0
 		mov	word [si+2], 0
@@ -852,22 +838,21 @@ sync_aliases:				; CODE XREF: Interrupt_Routine_0:loc_302p
 		mov	[si], cl
 		mov	[si+1],	cl
 
-loc_55B:				; CODE XREF: Interrupt_Routine_0+3B6j
+loc_55B:				
 		cmp	[di+4],	ax
 		jnz	short loc_567
 		mov	cl, 1
 		mov	[si], cl
 		mov	[si+2],	cl
 
-loc_567:				; CODE XREF: Interrupt_Routine_0+3C2j
+loc_567:				
 		cmp	[di+6],	ax
 		jnz	short loc_573
 		mov	cl, 1
 		mov	[si], cl
 		mov	[si+3],	cl
 
-loc_573:				; CODE XREF: Interrupt_Routine_0+3B1j
-					; Interrupt_Routine_0+3CEj
+loc_573:				
 		cmp	byte [si+1], 0
 		jnz	short loc_5A3
 		mov	ax, [di+2]
@@ -880,7 +865,7 @@ loc_573:				; CODE XREF: Interrupt_Routine_0+3B1j
 		mov	[si+1],	cl
 		mov	[si+2],	cl
 
-loc_58F:				; CODE XREF: Interrupt_Routine_0+3E7j
+loc_58F:				
 		cmp	[di+6],	ax
 		jnz	short loc_5A3
 		cmp	ch, 1
@@ -888,12 +873,11 @@ loc_58F:				; CODE XREF: Interrupt_Routine_0+3E7j
 		inc	ch
 		inc	cl
 
-loc_59D:				; CODE XREF: Interrupt_Routine_0+3FBj
+loc_59D:				
 		mov	[si+1],	cl
 		mov	[si+3],	cl
 
-loc_5A3:				; CODE XREF: Interrupt_Routine_0+3DBj
-					; Interrupt_Routine_0+3E2j ...
+loc_5A3:				
 		cmp	byte [si+2], 0
 		jnz	short loc_5BD
 		mov	ax, [di+4]
@@ -905,33 +889,31 @@ loc_5A3:				; CODE XREF: Interrupt_Routine_0+3DBj
 		mov	[si+2],	cl
 		mov	[si+3],	cl
 
-loc_5BD:				; CODE XREF: Interrupt_Routine_0+40Bj
-					; Interrupt_Routine_0+412j ...
+loc_5BD:				
 		mov	byte [cs:do_call_orig_int21], 1
 		call	int21_hndl
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-check_handler:				; CODE XREF: Interrupt_Routine_0+FEp
-					; Interrupt_Routine_0+187p ...
+check_handler:				
 		or	dx, dx
 		jnz	short loc_5D0
 		mov	ah, 83h	; 'Г'   ; The memory manager can not find the handle specified.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_5D0:				; CODE XREF: Interrupt_Routine_0+42Dj
+loc_5D0:				
 		cmp	dx, 18h
 		jle	short loc_5DA
 		mov	ah, 83h	; 'Г'   ; The memory manager can not find the handle specified.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_5DA:				; CODE XREF: Interrupt_Routine_0+437j
+loc_5DA:				
 		mov	di, EMS_logic_pages_tbl
 		mov	bx, 8
 
-check_next_entry:			; CODE XREF: Interrupt_Routine_0+456j
+check_next_entry:			
 		cmp	byte [cs:bx+di], 0FFh
 		jz	short loc_5ED
 		cmp	[cs:bx+di+1], dl
@@ -939,8 +921,7 @@ check_next_entry:			; CODE XREF: Interrupt_Routine_0+456j
 		retn			; Handler found	and checked
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_5ED:				; CODE XREF: Interrupt_Routine_0+448j
-					; Interrupt_Routine_0+44Ej
+loc_5ED:				
 		inc	bx
 		inc	bx
 		cmp	bx, 36h	; '6'   ; Check all the table
@@ -950,8 +931,7 @@ loc_5ED:				; CODE XREF: Interrupt_Routine_0+448j
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-get_page_map:				; CODE XREF: Interrupt_Routine_0+254p
-					; Interrupt_Routine_0+26Ep
+get_page_map:				
 		mov	es, word [bp+0Ch]
 		mov	di, [bp+2]
 		mov	si, EMS_logic_pages_tbl
@@ -961,12 +941,11 @@ get_page_map:				; CODE XREF: Interrupt_Routine_0+254p
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-set_page_map:				; CODE XREF: Interrupt_Routine_0+261p
-					; Interrupt_Routine_0+271p
+set_page_map:				
 		xor	ax, ax
 		mov	si, [bp+4]
 
-loc_60E:				; CODE XREF: Interrupt_Routine_0+4ADj
+loc_60E:				
 		mov	ds, word [bp+0Eh]
 ;		assume ds:nothing
 		mov	dx, [si]
@@ -977,18 +956,18 @@ loc_60E:				; CODE XREF: Interrupt_Routine_0+4ADj
 		jmp	short loc_643
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_61E:				; CODE XREF: Interrupt_Routine_0+47Ej
+loc_61E:				
 		cmp	dh, 18h
 		jle	short loc_626
 		jmp	short loc_643
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-loc_626:				; CODE XREF: Interrupt_Routine_0+485j
+loc_626:				
 		mov	di, EMS_logic_pages_tbl
 		mov	bx, 8
 
-loc_62C:				; CODE XREF: Interrupt_Routine_0+4A5j
+loc_62C:				
 		cmp	[cs:bx+di], dx
 		jnz	short loc_63A
 		push	ax
@@ -1006,14 +985,13 @@ loc_62C:				; CODE XREF: Interrupt_Routine_0+4A5j
 		jmp	short loc_643
 ; ───────────────────────────────────────────────────────────────────────────
 
-loc_63A:				; CODE XREF: Interrupt_Routine_0+493j
+loc_63A:				
 		inc	bl
 		inc	bl
 		cmp	bx, 36h	; '6'
 		jbe	short loc_62C
 
-loc_643:				; CODE XREF: Interrupt_Routine_0+47Aj
-					; Interrupt_Routine_0+480j ...
+loc_643:				
 		inc	al
 		inc	si
 		inc	si
@@ -1022,9 +1000,7 @@ loc_643:				; CODE XREF: Interrupt_Routine_0+47Aj
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-int21_hndl:				; CODE XREF: Interrupt_Routine_0+3Dp
-					; Interrupt_Routine_0+427p
-					; DATA XREF: ...
+int21_hndl:				
 		push	ax
 		push	bx
 		push	cx
@@ -1044,7 +1020,7 @@ int21_hndl:				; CODE XREF: Interrupt_Routine_0+3Dp
 		jz	short short_ret1
 		xor	bx, bx
 
-loop_on_EMS_slots0:			; CODE XREF: Interrupt_Routine_0+4E8j
+loop_on_EMS_slots0:			
 		cmp	byte [cs:bx+di], 1
 		jnz	short is_not_group1_0
 		mov	dl, bl
@@ -1053,7 +1029,7 @@ loop_on_EMS_slots0:			; CODE XREF: Interrupt_Routine_0+4E8j
 		jnz	short copy_to_all_group1
 		mov	bl, dl
 
-is_not_group1_0:			; CODE XREF: Interrupt_Routine_0+4D3j
+is_not_group1_0:			
 		inc	bl
 		cmp	bl, 3
 		jbe	short loop_on_EMS_slots0
@@ -1061,17 +1037,17 @@ is_not_group1_0:			; CODE XREF: Interrupt_Routine_0+4D3j
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-short_ret1:				; CODE XREF: Interrupt_Routine_0+4CBj
+short_ret1:				
 		jmp	short exit_int21_handler
 ; ───────────────────────────────────────────────────────────────────────────
 		nop
 
-copy_to_all_group1:			; CODE XREF: Interrupt_Routine_0+4DFj
+copy_to_all_group1:			
 		mov	[cs:CRC_group1], ax
 		mov	ah, dl
 		xor	bx, bx
 
-loop_on_EMS_slots1:			; CODE XREF: Interrupt_Routine_0+50Dj
+loop_on_EMS_slots1:			
 		mov	di, EMS_slots_state
 		cmp	byte [cs:bx+di], 1
 		jnz	short is_not_group1
@@ -1080,16 +1056,16 @@ loop_on_EMS_slots1:			; CODE XREF: Interrupt_Routine_0+50Dj
 		call	copy_mem_if_diff
 		pop	bx
 
-is_not_group1:				; CODE XREF: Interrupt_Routine_0+4FFj
+is_not_group1:				
 		inc	bl
 		cmp	bl, 3
 		jbe	short loop_on_EMS_slots1
 
-to_group2_1:				; CODE XREF: Interrupt_Routine_0+4EAj
+to_group2_1:				
 		xor	bl, bl
 		mov	di, EMS_slots_state
 
-loop_on_EMS_slots2:			; CODE XREF: Interrupt_Routine_0+52Dj
+loop_on_EMS_slots2:			
 		cmp	byte [cs:bx+di], 2
 		jnz	short is_not_group2
 		mov	dl, bl
@@ -1125,8 +1101,7 @@ loc_6E6:
 		cmp	bl, 3
 		jbe	short loc_6D6
 
-exit_int21_handler:			; CODE XREF: Interrupt_Routine_0:short_ret1j
-					; Interrupt_Routine_0+52Fj
+exit_int21_handler:			
 		pop	bp
 		pop	di
 		pop	si
@@ -1142,18 +1117,17 @@ exit_int21_handler:			; CODE XREF: Interrupt_Routine_0:short_ret1j
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-call_old_int21:				; CODE XREF: Interrupt_Routine_0+560j
+call_old_int21:				
 		jmp	far [cs:old_int21_offs]
 ; ───────────────────────────────────────────────────────────────────────────
 
-copy_mem_if_diff:			; CODE XREF: Interrupt_Routine_0+504p
-					; Interrupt_Routine_0+546p
+copy_mem_if_diff:			
 		cmp	ah, al
 		jnz	short copy_mem1
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-copy_mem1:				; CODE XREF: Interrupt_Routine_0+570j
+copy_mem1:				
 		cld
 		mov	di, segs_for_EMS_frames
 		xor	bh, bh
@@ -1171,8 +1145,7 @@ copy_mem1:				; CODE XREF: Interrupt_Routine_0+570j
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-calc_CRC:				; CODE XREF: Interrupt_Routine_0+4D7p
-					; Interrupt_Routine_0+51Cp
+calc_CRC:				
 		cld
 		mov	si, segs_for_EMS_frames
 		xor	bh, bh
@@ -1285,14 +1258,12 @@ we_have_upper_64Kb:
 		jmp	exit_request
 ; ───────────────────────────────────────────────────────────────────────────
 
-is_186_or_above:			; CODE XREF: Interrupt_Routine_0+5F0j
-					; Interrupt_Routine_0:mapping_does_not_workj ...
+is_186_or_above:			
 		call	prn_banner
 		mov	dx, aCanTInstallThisPc ;	"\nCan't install: this PC is not a JUKO X"...
 		int	21h		; DOS -
 
-exit_on_error:				; CODE XREF: Interrupt_Routine_0+63Cj
-					; Interrupt_Routine_0+651j
+exit_on_error:				
 		mov	bx, [cs:ReqBlock_Off]
 		mov	es, [cs:ReqBlock_Seg]
 		mov	word [es:bx+3], 100Ch ; Дивний код помилки:	Done, без Error, але є код помилки 0xC = General failure
