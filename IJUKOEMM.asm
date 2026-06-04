@@ -276,7 +276,9 @@ old_int21_offs	dd 0
 					
 do_call_orig_int21 db 0
 temp_phys_EMS_slot dw 0			
-segs_for_EMS_frames dw 9000h, 9400h, 9800h, 9C00h ; TODO: fix for 639 
+mem_dispos    EQU 0 ; 40h	
+mem_dispos_kb EQU mem_dispos*16 ; 1	Kb 
+segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos; TODO: fix for 639 
 		db    0
 		db  20h
 		db    0
@@ -424,7 +426,7 @@ EMS_fn00:				; GET MANAGER STATUS
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn01:				; Get Page Frame Segment Address
-		mov	word [bp+0Ah], 9000h ; Upper 64Kb of the 640Kb
+		mov	word [bp+0Ah], 9000h-mem_dispos ; Upper 64Kb of the 640Kb-mem_dispos
 					; Returned in saved BX:	[BP+0xAh]
 					; TODO:	allow customization for	639 Kb and so on
 		xor	ax, ax
@@ -1434,7 +1436,7 @@ install_int_handlers:
 		jmp	exit_on_error ; short 
 
 we_are_lo_enough:		
-		mov	ax, 9000h
+		mov	ax, 9000h-mem_dispos
 		mov	ds, ax
 ;		assume ds:nothing
 		cmp	word [ds:0], 6996h
@@ -1444,9 +1446,9 @@ we_are_lo_enough:
 		xor	ax, ax
 		mov	ds, ax
 ;		assume ds:seg000
-		cmp	word [413h], 640 ;	If 640Kb -- Mem size in BIOS Data Area
-		jnz	short is_186_or_above
-		mov	word [413h], 576 ;	Cut to 640-64 =	576 and	reboot
+		cmp	word [413h], 640-mem_dispos_kb ;	If 640Kb-mem_dispos_kb -- in mem size in BIOS Data Area
+		jnae short is_186_or_above
+		mov	word [413h], 576-mem_dispos_kb;	Cut to 640-mem_dispos_kb-64 =	576-mem_dispos_kb and	reboot
 		int	19h		; Soft reboot -- reinit	BIOS for new mem size
 
 we_have_upper_64Kb:		
