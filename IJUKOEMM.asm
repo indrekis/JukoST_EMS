@@ -501,6 +501,9 @@ found_all_pages_1:			; CODE XREF: Interrupt_Routine_0+C2j
 		mov	di, EMS_logic_pages_tbl
 
 search_next_backing_id2:		; CODE XREF: Interrupt_Routine_0+E7j
+        cmp     bl, 36h
+        ja      alloc_table_corrupt
+		
 		mov	cx, [bx+di]
 		cmp	cl, 0FFh
 		jnz	short is_not_free1
@@ -515,6 +518,10 @@ is_not_free1:				; CODE XREF: Interrupt_Routine_0+D6j
 		inc	bl
 		inc	bl
 		jmp	short search_next_backing_id2
+		
+alloc_table_corrupt:
+        mov     ah, 88h        ; insufficient free pages / allocation failed
+        jmp     exit_int67_handler		
 ; ───────────────────────────────────────────────────────────────────────────
 
 set_all_pages:			
