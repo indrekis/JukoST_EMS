@@ -59,7 +59,7 @@ do_call_orig_int21 db 0
 temp_phys_EMS_slot dw 0			
 mem_dispos    EQU 0 ; 40h	
 mem_dispos_kb EQU mem_dispos*16 ; 1	Kb 
-segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos; TODO: fix for 639 
+segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos; TODO: test for 639 
 		db    0
 		db  20h
 		db    0
@@ -109,7 +109,57 @@ segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C0
 		db    0
 		db  7Ch	; |
 
+%define B8000_DEBUG_TRACE 1
 
+%ifdef B8000_DEBUG_TRACE
+dbg_pos db 0
+
+dbg_mark:
+        push ax
+        push bx
+        push es
+
+        mov     bx, 0B800h       ; CGA/EGA/VGA text memory
+        mov     es, bx
+
+        xor     bh, bh
+        mov     bl, [cs:dbg_pos]
+        and     bl, 0Fh          ; 16 positions
+        shl     bx, 1
+
+        ; row 0, col 64 + dbg_pos
+        add     bx, 64*2
+
+        mov     ah, 1Eh          ; yellow on blue-ish / visible attribute
+        mov     [es:bx], ax
+
+        inc     byte [cs:dbg_pos]
+
+        pop     es
+        pop     bx
+        pop     ax
+        ret
+%endif
+
+%ifdef B8000_DEBUG_TRACE
+
+%macro DBG_MARK 1
+		pushf 
+		push AX
+        mov     al, %1
+        call    dbg_mark
+		pop  AX
+		popf 
+%endmacro
+
+%else
+
+%macro DBG_MARK 1
+%endmacro
+
+%endif
+		
+		
 Strategy_Routine_0: ; proc	far		
 		mov	[cs:ReqBlock_Seg], es ; ES:BX -> Device Request Block
 		mov	[cs:ReqBlock_Off], bx
@@ -176,7 +226,9 @@ int67_hndl:
 		push	di
 		push	bp
 		mov		byte [cs:do_call_orig_int21], 1
+;		DBG_MARK 'S'
 		call	int21_hndl
+		DBG_MARK 'R'
 		mov	bx, cs
 		mov	ds, bx
 ;		assume ds:seg000
@@ -184,7 +236,9 @@ int67_hndl:
 		mov	cl, ah		; Номер	EMS функц_ї з AH в CL
 		and	cl, 0F0h
 		cmp	cl, 40h	; '@'   ; Check if function code is 0x4y for any y
+;		DBG_MARK 'G'
 		jnz	short short_exit_int67
+;		DBG_MARK 'H'
 		xchg	al, ah		; Підфункція (або номер	сторінки, як для 44h, MAP MEMORY) з AL в AH
 		mov	cl, ah
 		and	al, 0Fh
@@ -192,6 +246,7 @@ int67_hndl:
 		xor	ah, ah
 		add	bx, ax
 		mov	bp, sp
+;		DBG_MARK 'I'
 		jmp	word [bx]	; Dispatch by function number.
 					; CL --	ex-AH, EMS function
 					; CH --	ex-AL, subfunction or page
@@ -202,11 +257,13 @@ short_exit_int67:
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn00:				; GET MANAGER STATUS
+		DBG_MARK '0'
 		xor	ax, ax		; Returns OK, see https://www.ctyme.com/intr/rb-7415.htm
-		jmp	exit_int67_handler
+		jmp	exit_int67_handler		
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn01:				; Get Page Frame Segment Address
+		DBG_MARK '1'
 		mov	word [bp+0Ah], 9000h-mem_dispos ; Upper 64Kb of the 640Kb-mem_dispos
 					; Returned in saved BX:	[BP+0xAh]
 					; TODO:	allow customization for	639 Kb and so on
@@ -215,6 +272,7 @@ EMS_fn01:				; Get Page Frame Segment Address
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn02:				; GET NUMBER OF	PAGES
+		DBG_MARK '2'
 		mov	word [bp+6], 18h ; BX = number of unallocated pages
 					; DX = total number of pages, 28 = 18h
 		call	calc_free_pages
@@ -224,6 +282,7 @@ EMS_fn02:				; GET NUMBER OF	PAGES
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn03:				; GET HANDLE AND ALLOCATE MEMORY
+		DBG_MARK '3'
 		mov	ax, [bp+0Ah]	; Saved	BX -- number of	logical	pages to allocate
 		cmp	ax, 18h		; Max number
 		jbe	short allocate_page1
@@ -232,7 +291,7 @@ EMS_fn03:				; GET HANDLE AND ALLOCATE MEMORY
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
-allocate_page1:			
+allocate_page1:		
 		call	calc_free_pages
 		cmp	ax, si
 		jbe	short allocate_page2
@@ -311,6 +370,7 @@ set_all_pages:
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn04:				; Map/Unmap Handle Page
+		DBG_MARK '4'		
 		cmp	cl, 3		; AH = 44h
 					; AL = physical	page number (0-3)
 					; BX = logical page number
@@ -351,6 +411,7 @@ loc_2AE:
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn05:				; RELEASE HANDLE AND MEMORY
+		DBG_MARK '5'
 		mov	dx, [bp+6]	; DX = EMM handle
 		or	dl, dl
 		jnz	short loc_2C9
@@ -403,11 +464,13 @@ loc_302:
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn06:				; Get EMM Version
-		mov	ax, 32h	; '2'   ; Returns 3.2
+		DBG_MARK '6'
+		mov	ax, 32h	; Returns 3.2
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn07:				; Save Page Map
+		DBG_MARK '7'
 		mov	bx, [bp+6]
 		mov	si, handler_context_flags
 		cmp	byte [cs:bx+si], 0
@@ -494,10 +557,12 @@ restore_next1:
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn09_fn0A:				; Reserved functions
+		DBG_MARK '9'
 		jmp	exit_int67_handler_err
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0B:				; "Get EMM Handle Count" according to the standart.
+		DBG_MARK 'B'
 		mov	ax, [bp+6]	; In fact, returns count of the	pages for handler in DL
 					; Restore DX from [BP+6]
 		call	calc_pages_for_handler
@@ -511,10 +576,11 @@ loc_3A7:
 		xor	dh, dh
 		mov	[bp+0Ah], dx	; Return to BX
 		xor	ax, ax
-		jmp	short exit_int67_handler
+		jmp	exit_int67_handler ; short is too short when debug is active 
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0C:				; Should be "Get EMM Handle Pages", looks like this and	previous functions are mismatched
+		DBG_MARK 'C'
 		call	count_active_handlers ;	Bug!
 		xor	ah, ah
 		mov	[bp+0Ah], ax
@@ -523,6 +589,7 @@ EMS_fn0C:				; Should be "Get EMM Handle Pages", looks like this and	previous fu
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0D:				; Get All EMM Handle Pages
+		DBG_MARK 'D'
 		mov	si, [bp+2]
 		call	count_active_handlers
 		xor	ah, ah
@@ -550,6 +617,7 @@ loc_3DE:
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0E:				; Many functions, code from AL was saved in AL 		
+		DBG_MARK 'E'
 		cld			; AL = subfunction
 					; 00h get mapping registers
 					; 01h set mapping registers
@@ -604,6 +672,7 @@ exit_int67_handler_err:
 					; https://www.lo-tech.co.uk/wiki/LIM_Expanded_Memory_Specification_V4:_Appendix_A
 
 exit_int67_handler:			
+		DBG_MARK 'Z'
 		pop	bp
 		pop	di
 		pop	si
@@ -733,6 +802,7 @@ To_next_handler2:
 we_found_entry1:			
 		shr	bl, 1
 		mov	ah, bl		; AH - page index
+		
 		mov	bl, al		; BL - destination slot
 		mov	al, 1
 		out	0E0h, al	; Map Juko additional memory
@@ -774,7 +844,7 @@ found_corresp_phys_page:
 		mov	es, word [cs:bx+si]
 		mov	bl, cl
 		mov	ds, word [cs:bx+si]
-		mov	cx, 2000h	; Move bytes from page in upper	64Kb to	backing	memory of Juko to save changes
+		mov	cx, 2000h ; 2000h	; Move bytes from page in upper	64Kb to	backing	memory of Juko to save changes
 		xor	si, si
 		xor	di, di
 		cld 
@@ -881,7 +951,9 @@ loc_5A3:
 
 loc_5BD:				
 		mov	byte [cs:do_call_orig_int21], 1
+;		DBG_MARK 'Q'
 		call	int21_hndl
+;		DBG_MARK 'T'
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
@@ -977,7 +1049,7 @@ loc_62C:
 loc_63A:				
 		inc	bl
 		inc	bl
-		cmp	bx, 36h	; '6'
+		cmp	bx, 36h
 		jbe	short loc_62C
 
 loc_643:				
@@ -999,6 +1071,7 @@ int21_hndl:
 		push	si
 		push	di
 		push	bp
+;		DBG_MARK 'U'
 		mov	di, EMS_slots_state
 		mov	ax, [cs:di]
 		mov	bx, [cs:di+2]
@@ -1087,7 +1160,8 @@ loc_6E6:
 		cmp	bl, 3
 		jbe	short loc_6D6
 
-exit_int21_handler:			
+exit_int21_handler:		
+;		DBG_MARK 'V'	
 		pop	bp
 		pop	di
 		pop	si
@@ -1099,11 +1173,13 @@ exit_int21_handler:
 		pop	ax
 		cmp	byte [cs:do_call_orig_int21], 1
 		jnz	short call_old_int21
+;		DBG_MARK 'W' 
 		mov	byte [cs:do_call_orig_int21], 0
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
-call_old_int21:				
+call_old_int21:		
+;		DBG_MARK 'X'
 		jmp	far [cs:old_int21_offs]
 ; ───────────────────────────────────────────────────────────────────────────
 
