@@ -9,6 +9,7 @@ desktop.ini
 .vscode/
 .idea/
 *.user
+temp/
 
 # NASM and other build artifacts and disk images 
 *.obj
