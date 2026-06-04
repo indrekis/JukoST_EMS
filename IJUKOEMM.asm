@@ -979,11 +979,24 @@ to_next_slot1:			; CODE XREF: Interrupt_Routine_0+368j
 		mov	bl, 8
 
 loc_4DC:				
+        cmp     bl, 36h				; Reached end of the table 
+        ja      loc_4DC_not_found
+
         cmp     [cs:bx+di], dx
         jz      short found_corresp_phys_page
         inc     bl
         inc     bl
         jmp     short loc_4DC
+
+loc_4DC_not_found:
+        mov     bx, [cs:temp_phys_EMS_slot]
+
+        ; current_map[physical_slot] refers to a page that no longer
+        ; has a corresponding backing entry.  Mark this physical slot
+        ; as unmapped and continue with the next slot.
+        mov     word [cs:bx+di], 00FFh
+
+        jmp     found_free_slot
 ; ───────────────────────────────────────────────────────────────────────────
 
 found_corresp_phys_page:		; CODE XREF: Interrupt_Routine_0+343j
