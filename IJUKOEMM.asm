@@ -60,54 +60,60 @@ temp_phys_EMS_slot dw 0
 mem_dispos    EQU 0 ; 40h	
 mem_dispos_kb EQU mem_dispos*16 ; 1	Kb 
 segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos; TODO: test for 639 
+		dw 2000h, 2400h, 2800h, 2C00h
+        dw 3000h, 3400h, 3800h, 3C00h
+        dw 4000h, 4400h, 4800h, 4C00h
+        dw 5000h, 5400h, 5800h, 5C00h
+        dw 6000h, 6400h, 6800h, 6C00h
+        dw 7000h, 7400h, 7800h, 7C00h
 		db    0
 		db  20h
 		db    0
-		db  24h	; $
+		db  24h	
 		db    0
-		db  28h	; (
+		db  28h	
 		db    0
-		db  2Ch	; ,
+		db  2Ch	
 		db    0
-		db  30h	; 0
+		db  30h	
 		db    0
-		db  34h	; 4
+		db  34h	
 		db    0
-		db  38h	; 8
+		db  38h	
 		db    0
-		db  3Ch	; <
+		db  3Ch	
 		db    0
-		db  40h	; @
+		db  40h	
 		db    0
-		db  44h	; D
+		db  44h	
 		db    0
-		db  48h	; H
+		db  48h	
 		db    0
-		db  4Ch	; L
+		db  4Ch	
 		db    0
-		db  50h	; P
+		db  50h	
 		db    0
-		db  54h	; T
+		db  54h	
 		db    0
-		db  58h	; X
+		db  58h	
 		db    0
-		db  5Ch	; \
+		db  5Ch	
 		db    0
-		db  60h	; `
+		db  60h	
 		db    0
-		db  64h	; d
+		db  64h	
 		db    0
-		db  68h	; h
+		db  68h	
 		db    0
-		db  6Ch	; l
+		db  6Ch	
 		db    0
-		db  70h	; p
+		db  70h	
 		db    0
-		db  74h	; t
+		db  74h	
 		db    0
-		db  78h	; x
+		db  78h	
 		db    0
-		db  7Ch	; |
+		db  7Ch	
 
 %define B8000_DEBUG_TRACE 1
 
@@ -1166,7 +1172,7 @@ to_next_slot1:
 		mov	si, segs_for_EMS_frames
 		mov	dx, [cs:bx+di]
 		cmp	dl, 0FFh
-		jz	short found_free_slot
+		jz found_free_slot; short
 		mov	cl, bl		; CL --	logical	page number for	handler
 		mov	[cs:temp_phys_EMS_slot], bx
 		mov	bl, 8
@@ -1193,6 +1199,7 @@ loc_4DC_not_found:
 ; ───────────────────────────────────────────────────────────────────────────
 
 found_corresp_phys_page:		
+		ISABUG_SHOW_WORD BX
 		mov	es, word [cs:bx+si]
 		mov	bl, cl
 		mov	ds, word [cs:bx+si]
@@ -1201,13 +1208,14 @@ found_corresp_phys_page:
 		xor	di, di
 		cld 
 		rep movsw
+;		ISABUG_REPORT_BAD_ES
         mov     bx, [cs:temp_phys_EMS_slot]
 
 found_free_slot:			
 		inc	bl
 		inc	bl
 		cmp	bl, 6
-		jbe	short to_next_slot1
+		jbe	to_next_slot1; short 
 		mov	di, segs_for_EMS_frames
 		mov	bl, ah		; AH --	backing	page index
 		shl	bl, 1
@@ -1220,6 +1228,7 @@ found_free_slot:
 		mov	cx, 2000h
 		cld 
 		rep movsw		; Copy data from backing memory	to EMS slot
+
 		mov	bl, al
 		xor	al, al
 		out	0E0h, al	; Return traditional mapping
