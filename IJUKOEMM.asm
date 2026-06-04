@@ -66,54 +66,6 @@ segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C0
         dw 5000h, 5400h, 5800h, 5C00h
         dw 6000h, 6400h, 6800h, 6C00h
         dw 7000h, 7400h, 7800h, 7C00h
-		db    0
-		db  20h
-		db    0
-		db  24h	
-		db    0
-		db  28h	
-		db    0
-		db  2Ch	
-		db    0
-		db  30h	
-		db    0
-		db  34h	
-		db    0
-		db  38h	
-		db    0
-		db  3Ch	
-		db    0
-		db  40h	
-		db    0
-		db  44h	
-		db    0
-		db  48h	
-		db    0
-		db  4Ch	
-		db    0
-		db  50h	
-		db    0
-		db  54h	
-		db    0
-		db  58h	
-		db    0
-		db  5Ch	
-		db    0
-		db  60h	
-		db    0
-		db  64h	
-		db    0
-		db  68h	
-		db    0
-		db  6Ch	
-		db    0
-		db  70h	
-		db    0
-		db  74h	
-		db    0
-		db  78h	
-		db    0
-		db  7Ch	
 
 %define B8000_DEBUG_TRACE 1
 
