@@ -269,7 +269,6 @@ loc_255:
 		jbe	short search_next1
 		jmp	short found_all_pages_1
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 found_free_backing_page:		
 		inc	dl
@@ -514,7 +513,6 @@ loc_3A7:
 		xor	ax, ax
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 EMS_fn0C:				; Should be "Get EMM Handle Pages", looks like this and	previous functions are mismatched
 		call	count_active_handlers ;	Bug!
@@ -523,7 +521,6 @@ EMS_fn0C:				; Should be "Get EMM Handle Pages", looks like this and	previous fu
 		xor	al, al
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 EMS_fn0D:				; Get All EMM Handle Pages
 		mov	si, [bp+2]
@@ -551,7 +548,6 @@ loc_3DE:
 		xor	ax, ax
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 EMS_fn0E:				; Many functions, code from AL was saved in AL 		
 		cld			; AL = subfunction
@@ -573,7 +569,6 @@ EMS_fn0E:				; Many functions, code from AL was saved in AL
 		mov	ax, 8
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 loc_3F9:				
 		cmp	al, 1
@@ -582,7 +577,6 @@ loc_3F9:
 		mov	ax, 8
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 loc_406:				
 		cmp	al, 2
@@ -592,7 +586,6 @@ loc_406:
 		mov	ax, 8
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 loc_416:			
 		cmp	al, 3
@@ -600,13 +593,11 @@ loc_416:
 		mov	ax, 8
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 loc_420:			
 		mov	ah, 8Fh	; undefined subfunction
 		jmp	short exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 exit_int67_handler_err:			
 		mov	ah, 84h	; 0x84: unsupported function
@@ -678,7 +669,6 @@ cont_search1:
 		jz	short not_our_handler
 		jmp	short inc_AL
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 not_our_handler:			
 		inc	bl
@@ -961,7 +951,6 @@ loc_61E:
 		jle	short loc_626
 		jmp	short loc_643
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 loc_626:				
 		mov	di, EMS_logic_pages_tbl
@@ -1035,12 +1024,10 @@ is_not_group1_0:
 		jbe	short loop_on_EMS_slots0
 		jmp	short to_group2_1
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 short_ret1:				
 		jmp	short exit_int21_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 copy_to_all_group1:			
 		mov	[cs:CRC_group1], ax
@@ -1080,7 +1067,6 @@ is_not_group2:
 		jbe	short loop_on_EMS_slots2
 		jmp	short exit_int21_handler
 ; ───────────────────────────────────────────────────────────────────────────
-		nop
 
 loc_6CE:				
 		mov	[cs:CRC_group2], ax
