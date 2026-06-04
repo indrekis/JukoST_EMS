@@ -143,6 +143,358 @@ dbg_mark:
 
 %ifdef B8000_DEBUG_TRACE
 
+; https://86box.readthedocs.io/en/latest/hardware/isabugger.html
+; ------------------------------------------------------------
+; 86Box ISABugger ports/registers
+; ------------------------------------------------------------
+
+ISABUG_IDX_PORT      equ 07Ah
+ISABUG_DATA_PORT     equ 07Bh
+
+ISABUG_RED_LEDS      equ 00h
+ISABUG_GREEN_LEDS    equ 01h
+ISABUG_RIGHT_DISP    equ 02h
+ISABUG_LEFT_DISP     equ 04h
+ISABUG_RESET         equ 0FFh
+
+
+; ------------------------------------------------------------
+; Write AL to ISABugger register imm8
+; destroys: nothing
+; ------------------------------------------------------------
+%macro ISABUG_WRITE_REG_AL 1
+        push    dx
+
+        mov     dx, ISABUG_IDX_PORT
+        out     dx, al              ; УВАГА: це НЕПРАВИЛЬНО для imm index
+                                    ; не використовувати напряму
+        pop     dx
+%endmacro
+
+
+; ------------------------------------------------------------
+; Write immediate byte to ISABugger register
+; preserves: AX, DX
+; ------------------------------------------------------------
+%macro ISABUG_WRITE_IMM 2
+        push    ax
+        push    dx
+
+        mov     dx, ISABUG_IDX_PORT
+        mov     al, %1
+        out     dx, al
+
+        mov     dx, ISABUG_DATA_PORT
+        mov     al, %2
+        out     dx, al
+
+        pop     dx
+        pop     ax
+%endmacro
+
+
+; ------------------------------------------------------------
+; Write AL to ISABugger register imm8
+; preserves: AX, DX
+; value is taken from AL before macro call
+; ------------------------------------------------------------
+%macro ISABUG_WRITE_AL 1
+        push    ax
+        push    dx
+
+        mov     ah, al              ; save value in AH
+
+        mov     dx, ISABUG_IDX_PORT
+        mov     al, %1
+        out     dx, al
+
+        mov     dx, ISABUG_DATA_PORT
+        mov     al, ah
+        out     dx, al
+
+        pop     dx
+        pop     ax
+%endmacro
+
+; ------------------------------------------------------------
+; Clear displays and LEDs
+; preserves: AX, DX
+; ------------------------------------------------------------
+%macro ISABUG_CLEAR 0
+        push    ax
+        push    dx
+
+        mov     dx, ISABUG_IDX_PORT
+        mov     al, ISABUG_RESET
+        out     dx, al
+
+        pop     dx
+        pop     ax
+%endmacro
+
+
+; ------------------------------------------------------------
+; Show 16-bit register or immediate word on hex displays
+;
+; left  display = high byte
+; right display = low byte
+;
+; examples:
+;   ISABUG_SHOW_WORD ax
+;   ISABUG_SHOW_WORD bx
+;   ISABUG_SHOW_WORD 9C00h
+;
+; preserves: AX, BX, DX
+; ------------------------------------------------------------
+%macro ISABUG_SHOW_WORD 1
+        push    ax
+        push    bx
+        push    dx
+
+        mov     bx, %1
+
+        ; left display = BH
+        mov     dx, ISABUG_IDX_PORT
+        mov     al, ISABUG_LEFT_DISP
+        out     dx, al
+
+        mov     dx, ISABUG_DATA_PORT
+        mov     al, bh
+        out     dx, al
+
+        ; right display = BL
+        mov     dx, ISABUG_IDX_PORT
+        mov     al, ISABUG_RIGHT_DISP
+        out     dx, al
+
+        mov     dx, ISABUG_DATA_PORT
+        mov     al, bl
+        out     dx, al
+
+        pop     dx
+        pop     bx
+        pop     ax
+%endmacro
+
+
+
+; ------------------------------------------------------------
+; Show segment register on hex displays
+;
+; examples:
+;   ISABUG_SHOW_SEG ds
+;   ISABUG_SHOW_SEG es
+;   ISABUG_SHOW_SEG cs
+;   ISABUG_SHOW_SEG ss
+;
+; preserves: AX, BX, DX
+; ------------------------------------------------------------
+%macro ISABUG_SHOW_SEG 1
+        push    ax
+        push    bx
+        push    dx
+
+        mov     bx, %1              ; NASM accepts: mov bx, ds / es / cs / ss
+
+        ; left display = high byte of segment
+        mov     dx, ISABUG_IDX_PORT
+        mov     al, ISABUG_LEFT_DISP
+        out     dx, al
+
+        mov     dx, ISABUG_DATA_PORT
+        mov     al, bh
+        out     dx, al
+
+        ; right display = low byte of segment
+        mov     dx, ISABUG_IDX_PORT
+        mov     al, ISABUG_RIGHT_DISP
+        out     dx, al
+
+        mov     dx, ISABUG_DATA_PORT
+        mov     al, bl
+        out     dx, al
+
+        pop     dx
+        pop     bx
+        pop     ax
+%endmacro
+
+
+; ------------------------------------------------------------
+; Show marker on LEDs
+;
+; red LEDs   = first byte
+; green LEDs = second byte
+;
+; examples:
+;   ISABUG_LEDS 0E5h, 00h
+;   ISABUG_LEDS 'E', 'S'
+;
+; preserves: AX, DX
+; ------------------------------------------------------------
+%macro ISABUG_LEDS 2
+        ISABUG_WRITE_IMM ISABUG_GREEN_LEDS, %1
+        ISABUG_WRITE_IMM ISABUG_RED_LEDS,   %2
+%endmacro
+
+
+; ------------------------------------------------------------
+; Wait approximately N BIOS timer ticks.
+;
+; 18.2065 ticks/sec, so:
+;   3 seconds ≈ 55 ticks
+;
+; IMPORTANT:
+; Your INT67 handler enters with CLI.
+; This macro temporarily enables interrupts with STI so that
+; the BIOS timer tick at 0040:006C can advance.
+;
+; preserves: FLAGS, AX, BX, ES
+; ------------------------------------------------------------
+%macro DEBUG_WAIT_TICKS 1
+        pushf
+        push    ax
+        push    bx
+        push    es
+
+        sti                         ; needed, otherwise BIOS tick will not advance
+
+        mov     ax, 0040h
+        mov     es, ax
+        mov     bx, [es:006Ch]      ; BIOS timer tick low word
+
+%%wait_loop:
+        mov     ax, [es:006Ch]
+        sub     ax, bx
+        cmp     ax, %1
+        jb      %%wait_loop
+
+        pop     es
+        pop     bx
+        pop     ax
+        popf
+%endmacro
+
+
+; ------------------------------------------------------------
+; Wait approximately 3 seconds
+; ------------------------------------------------------------
+%macro DEBUG_WAIT_3S 0
+		nop
+        ; DEBUG_WAIT_TICKS 55
+%endmacro
+
+; ------------------------------------------------------------
+; Report bad ES:
+;   - red LEDs   = 'E'
+;   - green LEDs = 'S'
+;   - displays   = ES value
+;   - pause ~3 seconds
+;
+; preserves: FLAGS, AX, BX, DX, ES
+; ------------------------------------------------------------
+%macro ISABUG_REPORT_BAD_ES 0
+        pushf
+        push    ax
+        push    bx
+        push    dx
+
+        ISABUG_LEDS 10b, 0
+        ISABUG_SHOW_SEG es
+        DEBUG_WAIT_3S
+
+        pop     dx
+        pop     bx
+        pop     ax
+        popf
+%endmacro
+
+
+; ------------------------------------------------------------
+; Report bad DS
+; ------------------------------------------------------------
+%macro ISABUG_REPORT_BAD_DS 0
+        pushf
+        push    ax
+        push    bx
+        push    dx
+
+        ISABUG_LEDS 01b, 0
+        ISABUG_SHOW_SEG ds
+        DEBUG_WAIT_3S
+
+        pop     dx
+        pop     bx
+        pop     ax
+        popf
+%endmacro
+
+
+; ------------------------------------------------------------
+; Report bad SI or BX value as 16-bit word
+; ------------------------------------------------------------
+%macro ISABUG_REPORT_WORD 3
+        ; %1 = red LED marker
+        ; %2 = green LED marker
+        ; %3 = word register/value to show
+        pushf
+        push    ax
+        push    bx
+        push    dx
+
+        ISABUG_LEDS %1, %2
+        ISABUG_SHOW_WORD %3
+        DEBUG_WAIT_3S
+
+        pop     dx
+        pop     bx
+        pop     ax
+        popf
+%endmacro
+
+%else 
+
+%macro ISABUG_WRITE_REG_AL 1
+%endmacro
+
+%macro ISABUG_WRITE_IMM 2
+%endmacro
+
+%macro ISABUG_WRITE_AL 1
+%endmacro
+
+%macro ISABUG_CLEAR 0
+%endmacro
+
+%macro ISABUG_SHOW_WORD 1
+%endmacro
+
+%macro ISABUG_SHOW_SEG 1
+%endmacro
+
+%macro ISABUG_LEDS 2
+%endmacro
+
+%macro DEBUG_WAIT_TICKS 1
+%endmacro
+
+%macro DEBUG_WAIT_3S 0
+%endmacro
+
+%macro ISABUG_REPORT_BAD_ES 0
+%endmacro
+
+%macro ISABUG_REPORT_BAD_DS 0
+%endmacro
+
+%macro ISABUG_REPORT_WORD 3
+%endmacro
+
+
+%endif
+
+%ifdef B8000_DEBUG_TRACE
+
 %macro DBG_MARK 1
 		pushf 
 		push AX
