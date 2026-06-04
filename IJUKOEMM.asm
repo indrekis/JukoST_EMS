@@ -1124,7 +1124,7 @@ to_next_slot1:
 		mov	si, segs_for_EMS_frames
 		mov	dx, [cs:bx+di]
 		cmp	dl, 0FFh
-		jz found_free_slot; short
+		jz short found_free_slot
 		mov	cl, bl		; CL --	logical	page number for	handler
 		mov	[cs:temp_phys_EMS_slot], bx
 		mov	bl, 8
@@ -1151,7 +1151,6 @@ loc_4DC_not_found:
 ; ───────────────────────────────────────────────────────────────────────────
 
 found_corresp_phys_page:		
-		ISABUG_SHOW_WORD BX
 		mov	es, word [cs:bx+si]
 		mov	bl, cl
 		mov	ds, word [cs:bx+si]
@@ -1160,14 +1159,13 @@ found_corresp_phys_page:
 		xor	di, di
 		cld 
 		rep movsw
-;		ISABUG_REPORT_BAD_ES
         mov     bx, [cs:temp_phys_EMS_slot]
 
 found_free_slot:			
 		inc	bl
 		inc	bl
 		cmp	bl, 6
-		jbe	to_next_slot1; short 
+		jbe	short to_next_slot1
 		mov	di, segs_for_EMS_frames
 		mov	bl, ah		; AH --	backing	page index
 		shl	bl, 1
@@ -1593,7 +1591,7 @@ install_int_handlers:
 		call	prn_banner
 		mov	dx, aTooHighTRSAddr ; "\nCan't install: DOS offers too high add"...
 		int	21h		; DOS -
-		jmp	exit_on_error ; short 
+		jmp	short exit_on_error
 
 we_are_lo_enough:		
 		mov	ax, 9000h-mem_dispos
