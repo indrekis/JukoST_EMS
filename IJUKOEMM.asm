@@ -993,6 +993,7 @@ found_corresp_phys_page:		; CODE XREF: Interrupt_Routine_0+343j
 		mov	cx, 2000h	; Move bytes from page in upper	64Kb to	backing	memory of Juko to save changes
 		xor	si, si
 		xor	di, di
+		cld 
 		rep movsw
         mov     bx, [cs:temp_phys_EMS_slot]
 
@@ -1011,6 +1012,7 @@ found_free_slot:			; CODE XREF: Interrupt_Routine_0+335j
 		xor	di, di
 		xor	si, si
 		mov	cx, 2000h
+		cld 
 		rep movsw		; Copy data from backing memory	to EMS slot
 		mov	bl, al
 		xor	al, al
@@ -1146,6 +1148,7 @@ get_page_map:				; CODE XREF: Interrupt_Routine_0+254p
 		mov	di, [bp+2]
 		mov	si, EMS_logic_pages_tbl
 		mov	cx, 4
+		cld 
 		rep movsw
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1355,6 +1358,7 @@ copy_mem1:				; CODE XREF: Interrupt_Routine_0+570j
 		xor	di, di
 		xor	si, si
 		mov	cx, 2000h	; 2000h	words =	16Кб, EMS frame
+		cld 
 		rep movsw
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
