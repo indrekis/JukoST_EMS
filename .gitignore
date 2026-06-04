@@ -1,0 +1,52 @@
+# Noise 
+.DS_Store
+Thumbs.db
+desktop.ini
+
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.user
+
+# NASM and other build artifacts and disk images 
+*.obj
+*.o
+*.lst
+*.map
+*.err
+*.bin
+*.com
+*.exe
+*.sys
+*.bak
+*.orig
+*.tmp
+*.img
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# IDA working files (.idb are versioned)
+*.id0
+*.id1
+*.id2
+*.id3
+*.id4
+*.id5
+*.id6
+*.id7
+*.nam
+*.til
+*.i64
+*.asm~
+*.lst~
+
+
+# Keep original files and local copy of NASM 
+!JUKOEMM.SYS
+!JUKOEMMU.SYS
+!NASM.EXE 
