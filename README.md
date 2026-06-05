@@ -1,0 +1,1 @@
+nasm IJUKOEMM.asm -o IJUKOEMM.SYS -l IJUKOEMM.LST 
