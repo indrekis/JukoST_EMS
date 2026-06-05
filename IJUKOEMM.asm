@@ -59,13 +59,13 @@ do_call_orig_int21 db 0
 temp_phys_EMS_slot dw 0			
 mem_dispos    EQU 0 ; 40h	
 mem_dispos_kb EQU mem_dispos*16/1024 ; 1	Kb 
-segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos; TODO: test for 639 
-		dw 2000h, 2400h, 2800h, 2C00h
-        dw 3000h, 3400h, 3800h, 3C00h
-        dw 4000h, 4400h, 4800h, 4C00h
-        dw 5000h, 5400h, 5800h, 5C00h
-        dw 6000h, 6400h, 6800h, 6C00h
-        dw 7000h, 7400h, 7800h, 7C00h
+segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos
+					dw 2000h, 2400h, 2800h, 2C00h
+					dw 3000h, 3400h, 3800h, 3C00h
+					dw 4000h, 4400h, 4800h, 4C00h
+					dw 5000h, 5400h, 5800h, 5C00h
+					dw 6000h, 6400h, 6800h, 6C00h
+					dw 7000h, 7400h, 7800h, 7C00h
 
 ; %define B8000_DEBUG_TRACE 1
 
@@ -576,7 +576,6 @@ EMS_fn01:				; Get Page Frame Segment Address
 		DBG_MARK '1'
 		mov	word [bp+0Ah], 9000h-mem_dispos ; Upper 64Kb of the 640Kb-mem_dispos
 					; Returned in saved BX:	[BP+0xAh]
-					; TODO:	allow customization for	639 Kb and so on
 		xor	ax, ax
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1604,7 +1603,6 @@ we_are_lo_enough:
 ;		assume ds:nothing
 		cmp	word [ds:0], 6996h
 		jz	short we_have_upper_64Kb ; Seg 9000h --	576 КБ,	тобто, відкусуємо верхні 64 Кб
-					; TODO:	adapt for the 639Kb
 		mov	word [ds:0], 6996h		
 		xor	ax, ax
 		mov	ds, ax
