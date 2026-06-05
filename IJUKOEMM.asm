@@ -58,7 +58,7 @@ old_int21_offs	dd 0
 do_call_orig_int21 db 0
 temp_phys_EMS_slot dw 0			
 mem_dispos    EQU 0 ; 40h	
-mem_dispos_kb EQU mem_dispos*16 ; 1	Kb 
+mem_dispos_kb EQU mem_dispos*16/1024 ; 1	Kb 
 segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos; TODO: test for 639 
 		dw 2000h, 2400h, 2800h, 2C00h
         dw 3000h, 3400h, 3800h, 3C00h
@@ -1609,9 +1609,11 @@ we_are_lo_enough:
 		xor	ax, ax
 		mov	ds, ax
 ;		assume ds:seg000
-		cmp	word [413h], 640-mem_dispos_kb ;	If 640Kb-mem_dispos_kb -- in mem size in BIOS Data Area
-		jnae short is_186_or_above
-		mov	word [413h], 576-mem_dispos_kb;	Cut to 640-mem_dispos_kb-64 =	576-mem_dispos_kb and	reboot
+		mov ax, word [413h] ; mem size in BIOS Data Area
+		cmp ax, 640 - mem_dispos_kb
+		jb  is_186_or_above ; Too small memory 
+		sub ax, 64 + mem_dispos_kb
+		mov	word [413h], ax;	Cut to 640-mem_dispos_kb-64
 		int	19h		; Soft reboot -- reinit	BIOS for new mem size
 
 we_have_upper_64Kb:		

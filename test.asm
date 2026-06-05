@@ -10,21 +10,16 @@ start:
 
     ; BIOS Data Area:
     ; 0040:0013 = conventional memory size in KB
-    mov ax, 0040h
+    xor ax, ax
     mov ds, ax
 
-    cmp word [0013h], 1
-    jbe .skip_decrement
-    dec word [0013h]
-
-.skip_decrement:
-    ; Optional: set warm boot flag
-    ; 0040:0072 = 1234h means warm boot request
-    mov word [0072h], 1234h
+    dec word [ds:00413h]
 
     sti
 
     ; Bootstrap loader / reboot
+	mov word [0472h], 1234h
+	jmp 0FFFFh:0000h
     int 19h
 
     ; If INT 19h returns for some reason, do hard reboot jump
