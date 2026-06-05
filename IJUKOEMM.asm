@@ -870,6 +870,15 @@ EMS_fn09_fn0A:				; Reserved functions
 		jmp	exit_int67_handler_err
 ; ───────────────────────────────────────────────────────────────────────────
 
+EMS_fn0B:				; Get EMM Handle Count
+		DBG_MARK 'C'
+		call	count_active_handlers 
+		xor	ah, ah
+		mov	[bp+0Ah], ax
+		xor	al, al
+		jmp	short exit_int67_handler
+; ───────────────────────────────────────────────────────────────────────────
+
 EMS_fn0C:				; Get EMM Handle Pages 
 		DBG_MARK 'B'
 		mov	ax, [bp+6]	; Returns count of the pages for handler in DL
@@ -888,14 +897,6 @@ loc_3A7:
 		jmp	short exit_int67_handler ; short is too short when debug is active 
 ; ───────────────────────────────────────────────────────────────────────────
 
-EMS_fn0B:				; Get EMM Handle Count
-		DBG_MARK 'C'
-		call	count_active_handlers 
-		xor	ah, ah
-		mov	[bp+0Ah], ax
-		xor	al, al
-		jmp	short exit_int67_handler
-; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0D:				; Get All EMM Handle Pages
 		DBG_MARK 'D'
