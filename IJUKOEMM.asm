@@ -876,7 +876,7 @@ EMS_fn0B:				; Get EMM Handle Count
 		xor	ah, ah
 		mov	[bp+0Ah], ax
 		xor	al, al
-		jmp	short exit_int67_handler
+		jmp	exit_int67_handler ; short 
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0C:				; Get EMM Handle Pages 
@@ -1675,8 +1675,9 @@ prn_test:
 ; ───────────────────────────────────────────────────────────────────────────
 aExpandedMemoryEmu db 0Ah		
 		db 0Dh,'Expanded memory emulator V1.0 by George Lefterov, Sofia, Decembe'
-		db 'r 1991.',0Ah
-		db 0Dh,'$'
+		db 'r 1991.',0Ah, 0Dh
+		db 'Reconsturced and fixed a little by Oleg Farenyuk aka Indrekis, Lviv, June 2026.'
+		db 0Ah, 0Dh,'$'
 aCanTInstallThisPc db 0Ah		
 		db 'Can',27h,'t install: this PC is not a JUKO XT with 1M RAM!',0Ah
 		db 0Ah
