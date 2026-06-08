@@ -68,6 +68,7 @@ segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C0
 					dw 7000h, 7400h, 7800h, 7C00h
 
 ; %define B8000_DEBUG_TRACE 1
+; %define A86BOX_ISABUGGER_TRACE 1
 
 %ifdef B8000_DEBUG_TRACE
 dbg_pos db 0
@@ -99,7 +100,7 @@ dbg_mark:
         ret
 %endif
 
-%ifdef B8000_DEBUG_TRACE
+%ifdef A86BOX_ISABUGGER_TRACE
 
 ; https://86box.readthedocs.io/en/latest/hardware/isabugger.html
 ; ------------------------------------------------------------

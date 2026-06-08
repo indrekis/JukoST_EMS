@@ -1,6 +1,6 @@
 # IJUKOEMM — Juko ST EMS Driver Reconstruction
 
-`IJUKOEMM` is a reconstructed and patched DOS device driver, which emulates EMS using the Juko ST motherboard exotic banking interface. Details (in Ukrainian): ''[Материнська плата Juko ST – ще одна XT-машина](https://indrekis.github.io/retrocomputing/ibm_pc_compat/2024/08/28/juko_xt_mb.html)'') The driver emulates an EMS 3.2 by using the a 64 KiB page frame at the top of conventional memory as a EMS page frame to access the additional 384 KiB of memory. 
+`IJUKOEMM` is a reconstructed and patched DOS device driver, which emulates EMS using the Juko ST motherboard exotic banking interface. Details (in Ukrainian): ''[Материнська плата Juko ST – ще одна XT-машина](https://indrekis.github.io/retrocomputing/ibm_pc_compat/2024/08/28/juko_xt_mb.html)''). The driver emulates an EMS 3.2 by using the a 64 KiB page frame at the top of conventional memory as a EMS page frame to access the additional 384 KiB of memory. 
 
 The original driver was written by **George Lefterov**, as indicated by the original banner string. This project is based on a decrypted binary, IDA disassembly, and a manually cleaned NASM reconstruction.
 
@@ -22,11 +22,13 @@ Optimize:
 
 E.g., some jmps are not short because of they became too far with debug output. Multi-pass optimization would make them short anyway if possible. 
 
-To build with debug output:
+To build with full debug output:
 
 ```bash
-./nasm IJUKOEMM.asm -o IJUKOEMM.SYS -l IJUKOEMM.LST -DB8000_DEBUG_TRACE=1
+./nasm IJUKOEMM.asm -o IJUKOEMM.SYS -l IJUKOEMM.LST -DB8000_DEBUG_TRACE=1 -DA86BOX_ISABUGGER_TRACE=1
 ```
+
+Each debug log can also be enabled separately by passing only one of these defines.
 
 NASM for Windows is included in the repo for convenience. LST file in not required though useful.
 
