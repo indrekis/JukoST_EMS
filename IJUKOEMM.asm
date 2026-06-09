@@ -49,8 +49,6 @@ EMS_slots_state	 times 4 db 0
 					; 0 - no alias conflict
 					; 1 - belongs to synchronization group 1
 					; 2 - belongs to synchronization group 2
-					; Групи	синхронізації для alisa:
-					; 0 - не має alias-конфлікту
 CRC_group1	dw 0			
 					
 CRC_group2	dw 0	
@@ -61,7 +59,6 @@ do_call_orig_int21 db 0
 temp_phys_EMS_slot dw 0		
 
 mem_dispos_kb      dw 0
-mem_dispos_paras   dw 0
 ems_frame_base_seg dw 9000h
 	
 segs_for_EMS_frames dw 9000h, 9400h, 9800h, 9C00h
@@ -693,7 +690,7 @@ EMS_fn04:				; Map/Unmap Handle Page
 					; or FFFFh to unmap (QEMM)
 					; DX = handle
 					; We have 4 pages?
-		jle	short map_page_1
+		jbe	short map_page_1
 		mov	ah, 8Bh	; One or more of the physical pages is out of the range of allowable physical pages.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
@@ -878,7 +875,7 @@ EMS_fn09_fn0A:				; Reserved functions
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0B:				; Get EMM Handle Count
-		DBG_MARK 'C'
+		DBG_MARK 'B'
 		call	count_active_handlers 
 		xor	ah, ah
 		mov	[bp+0Ah], ax
@@ -887,7 +884,7 @@ EMS_fn0B:				; Get EMM Handle Count
 ; ───────────────────────────────────────────────────────────────────────────
 
 EMS_fn0C:				; Get EMM Handle Pages 
-		DBG_MARK 'B'
+		DBG_MARK 'C'
 		mov	ax, [bp+6]	; Returns count of the pages for handler in DL
 					    ; Restore DX from [BP+6]
 		call	calc_pages_for_handler
@@ -1288,7 +1285,7 @@ check_handler:
 
 loc_5D0:				
 		cmp	dx, 18h
-		jle	short loc_5DA
+		jbe	short loc_5DA
 		mov	ah, 83h	; 'Г'   ; The memory manager can not find the handle specified.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1342,7 +1339,7 @@ loc_60E:
 
 loc_61E:				
 		cmp	dh, 18h
-		jle	short loc_626
+		jbe	short loc_626
 		jmp	short loc_643
 ; ───────────────────────────────────────────────────────────────────────────
 
@@ -1658,21 +1655,10 @@ we_have_upper_64Kb:
 ; 		  [cs:mem_dispos_kb] = 0..64
 ;
 ; output:
-;		  mem_dispos_paras
 ;   	  ems_frame_base_seg
 ;   	  segs_for_EMS_frames[0..3]
 ; preserves: AX, BX, DI
 ; ------------------------------------------------------------
-; AX <<= 6, 8086-safe
-%macro SHL6_AX 0
-        shl ax, 1
-        shl ax, 1
-        shl ax, 1
-        shl ax, 1
-        shl ax, 1
-        shl ax, 1
-%endmacro
-
 
 build_mem_layout:
         push ax
@@ -1682,9 +1668,6 @@ build_mem_layout:
         mov ax, [cs:mem_dispos_kb]
         cmp ax, 64
         ja  bad_mem_dispos_config
-
-        SHL6_AX                         ; Kb to paragraphs
-        mov [cs:mem_dispos_paras], ax
 
         mov bx, 9000h
         sub bx, ax                      ; BX = first EMS frame slot segment
@@ -1795,24 +1778,20 @@ parse_mem_dispos_config:
 
 .ok_default:
 .ok:
-        pop es
-        pop si
-        pop dx
-        pop cx
-        pop bx
-        pop ax
         clc
-        retn
+        jmp short .ret
 
 .bad:
+        stc
+
+.ret:
         pop es
         pop si
         pop dx
         pop cx
         pop bx
         pop ax
-        stc
-        retn
+        retn		
 
 ; ------------------------------------------------------------
 ; Parse unsigned decimal number at ES:SI.
