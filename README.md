@@ -5,9 +5,38 @@
 The original driver was written by **George Lefterov**, as indicated by the original banner string. This project is based on a decrypted binary, IDA disassembly, and a manually cleaned NASM reconstruction.
 
 To debug the driver, I patched 86Box locally to emulate the Juko ST bank switching; I hope to submit this as a pull request.
-. 
 
 The goal of this project is to understand, preserve, and make usable the original Juko ST memory-expansion logic on real hardware and in emulators such as 86Box.
+
+## Usage
+
+Add the following line to your CONFIG.SYS for the 640 Kb system:
+
+```bat
+DEVICE=IJUKOEMM.SYS 
+```
+
+You can also specify a displacement in Kb below the 640 Kb boundary, where nn is value in range 0..64:
+
+```
+DEVICE=IJUKOEMM.SYS /D:nn
+```
+
+Several examples:
+
+The default is equivalent to /D:0:
+
+```
+DEVICE=IJUKOEMM.SYS /D:0 
+```
+
+System with the 639 Kb: 
+
+```
+DEVICE=IJUKOEMM.SYS /D:1
+```
+
+Currently the expanded memory size is always expected to be 384 Kb.
 
 ## Building
 
@@ -41,13 +70,9 @@ Several small features were added:
 
 - Two types of debug support -- for the [86Box ISABugger debug facility](https://86box.readthedocs.io/en/latest/hardware/isabugger.html) and by writing directly to B800:0000 text video memory.
 
-- Added (currently -- static) support for systems with slightly less than exactly 640 Kb conventional memory available. This is important, e.g. for the XT IDE, requiring 1 Kb RAM for its needs and leaving 639 Kb for the DOS.  
+- Added dynamic support for systems with slightly less than exactly 640 Kb conventional memory available. This is important, e.g. for the XT IDE, requiring 1 Kb RAM for its needs and leaving 639 Kb for the DOS.  
 
-To change the memory size, set cut size in paragraphs in this constant:
-
-```nasm
-mem_dispos EQU 40h    ; 1Kb -- system with the 639 Kb conventional memory
-```
+To change the memory size, use configuration option ``/D:nn`` -- see details above.
 
 Several more or less small fixes were made:
 

@@ -56,10 +56,13 @@ CRC_group2	dw 0
 old_int21_offs	dd 0
 					
 do_call_orig_int21 db 0
-temp_phys_EMS_slot dw 0			
-mem_dispos    EQU 0 ; 40h	
-mem_dispos_kb EQU mem_dispos*16/1024 ; 1	Kb 
-segs_for_EMS_frames dw 9000h-mem_dispos, 9400h-mem_dispos, 9800h-mem_dispos, 9C00h-mem_dispos
+temp_phys_EMS_slot dw 0		
+
+mem_dispos_kb      dw 0
+mem_dispos_paras   dw 0
+ems_frame_base_seg dw 9000h
+	
+segs_for_EMS_frames dw 9000h, 9400h, 9800h, 9C00h
 					dw 2000h, 2400h, 2800h, 2C00h
 					dw 3000h, 3400h, 3800h, 3C00h
 					dw 4000h, 4400h, 4800h, 4C00h
@@ -575,8 +578,9 @@ EMS_fn00:				; GET MANAGER STATUS
 
 EMS_fn01:				; Get Page Frame Segment Address
 		DBG_MARK '1'
-		mov	word [bp+0Ah], 9000h-mem_dispos ; Upper 64Kb of the 640Kb-mem_dispos
-					; Returned in saved BX:	[BP+0xAh]
+		mov ax, [cs:ems_frame_base_seg]
+		mov	word [bp+0Ah], ax ; Upper 64Kb of the 640Kb-mem_dispos
+							  ; Returned in saved BX:	[BP+0xAh]
 		xor	ax, ax
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1067,15 +1071,15 @@ inc_AL:
 		inc	al
 		jmp	short to_next_handler
 ; ───────────────────────────────────────────────────────────────────────────
-; Ймов_рно, алгоритм:
+; Ймовірно, алгоритм:
 
 ; 1. знайти backing copy стор_нки	DX
-; 2. ув_мкнути JUKO alternate mapping через OUT E0h,1
-; 3. записати назад у backing store вс_ 4	поточн_	page-frame slots
+; 2. увімкнути JUKO alternate mapping через OUT E0h,1
+; 3. записати назад у backing store всі 4	поточні	page-frame slots
 ; 4. скоп_ювати потр_бну backing page у slot AL
 ; 5. вимкнути JUKO alternate mapping через OUT E0h,0
 ; 6. оновити current page	map
-; 7. перебудувати	alias-groups _ синхрон_зувати дубл_кати
+; 7. перебудувати	alias-groups і синхронізувати дублікати
 
 map_EMS_page_to_frame:			
 		mov	di, EMS_logic_pages_tbl ; AL = physical EMS frame/page-frame slot: 0..3
@@ -1548,7 +1552,13 @@ CRC_loop1:
 init_drv:	
 		mov	cx, cs
 		mov	ds, cx
-;		assume ds:seg000		
+		
+        call parse_mem_dispos_config
+        jc   bad_config_error
+
+        call build_mem_layout
+        jc   bad_config_error
+		
 		push	sp
 		mov	bp, sp
 		cmp	[bp+0],	sp
@@ -1597,23 +1607,25 @@ install_int_handlers:
 		call	prn_banner
 		mov	dx, aTooHighTRSAddr ; "\nCan't install: DOS offers too high add"...
 		int	21h		; DOS -
-		jmp	short exit_on_error
+		jmp exit_on_error; short
 
 we_are_lo_enough:		
-		mov	ax, 9000h-mem_dispos
+		mov ax, [cs:ems_frame_base_seg]
 		mov	ds, ax
 ;		assume ds:nothing
 		cmp	word [ds:0], 6996h
-		jz	short we_have_upper_64Kb ; Seg 9000h --	576 КБ,	тобто, відкусуємо верхні 64 Кб
+		jz	short we_have_upper_64Kb ; Відкусуємо верхні 64 Кб
 		mov	word [ds:0], 6996h		
 		xor	ax, ax
 		mov	ds, ax
 ;		assume ds:seg000
 		mov ax, word [413h] ; mem size in BIOS Data Area
-		cmp ax, 640 - mem_dispos_kb
-		jb  is_186_or_above ; Too small memory 
-		sub ax, 64 + mem_dispos_kb
-		mov	word [413h], ax;	Cut to 640-mem_dispos_kb-64
+		mov bx, 640
+        sub bx, [cs:mem_dispos_kb]      ; required top before frame steal
+        cmp ax, bx
+        jb  is_186_or_above
+		sub bx, 64 
+		mov	word [413h], bx;	Cut to 640-mem_dispos_kb-64
 		int	19h		; Soft reboot -- reinit	BIOS for new mem size
 
 we_have_upper_64Kb:		
@@ -1636,6 +1648,218 @@ we_have_upper_64Kb:
 		mov	dx, aSuccessfullyInsta ;	"\nSuccessfully	installed: now you have	3"...
 		int	21h		; DOS -
 		jmp	exit_request
+		
+; ------------------------------------------------------------
+; input:
+; 		  [cs:mem_dispos_kb] = 0..64
+;
+; output:
+;		  mem_dispos_paras
+;   	  ems_frame_base_seg
+;   	  segs_for_EMS_frames[0..3]
+; preserves: AX, BX, DI
+; ------------------------------------------------------------
+; AX <<= 6, 8086-safe
+%macro SHL6_AX 0
+        shl ax, 1
+        shl ax, 1
+        shl ax, 1
+        shl ax, 1
+        shl ax, 1
+        shl ax, 1
+%endmacro
+
+
+build_mem_layout:
+        push ax
+        push bx
+        push di
+
+        mov ax, [cs:mem_dispos_kb]
+        cmp ax, 64
+        ja  bad_mem_dispos_config
+
+        SHL6_AX                         ; Kb to paragraphs
+        mov [cs:mem_dispos_paras], ax
+
+        mov bx, 9000h
+        sub bx, ax                      ; BX = first EMS frame slot segment
+        mov [cs:ems_frame_base_seg], bx
+
+        mov di, segs_for_EMS_frames
+
+        mov [cs:di+0], bx
+        add bx, 0400h                   ; +16 Kb
+        mov [cs:di+2], bx
+        add bx, 0400h
+        mov [cs:di+4], bx
+        add bx, 0400h
+        mov [cs:di+6], bx
+
+        pop di
+        pop bx
+        pop ax
+        clc
+        retn
+
+bad_mem_dispos_config:
+        pop di
+        pop bx
+        pop ax
+        stc
+        retn		
+; ───────────────────────────────────────────────────────────────────────────
+INIT_CMDLINE_PTR_OFF equ 12h     ; DOS 3.x+ init packet command-line pointer,
+
+; ------------------------------------------------------------
+; Default = /D:0
+; 
+; Accept:
+;   /D:0
+;   /D=1
+;   /D4
+;   -D3
+;   -D:2
+;   -D=0
+;
+; Result:
+;   [cs:mem_dispos_kb] = 0..64
+;
+; CF=0 ok, CF=1 bad config.
+; ------------------------------------------------------------
+
+parse_mem_dispos_config:
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push es
+
+        mov bx, [cs:ReqBlock_Off]
+        mov es, [cs:ReqBlock_Seg]
+
+        mov si, [es:bx+INIT_CMDLINE_PTR_OFF]
+        mov ax, [es:bx+INIT_CMDLINE_PTR_OFF+2]
+        or  ax, ax
+        jz  .ok_default
+
+        mov es, ax
+
+.scan:
+        mov al, [es:si]
+        inc si
+
+        cmp al, 0
+        je  .ok_default
+        cmp al, 0Dh
+        je  .ok_default
+        cmp al, 0Ah
+        je  .ok_default
+
+        cmp al, '/'
+        je  .after_switch
+        cmp al, '-'
+        jne .scan
+
+.after_switch:
+        mov al, [es:si]
+        inc si
+        and al, 0DFh                    ; uppercase
+        cmp al, 'D'
+        jne .scan
+
+        mov al, [es:si]
+        cmp al, ':'
+        je  .skip_sep
+        cmp al, '='
+        je  .skip_sep
+        jmp .parse_number               
+
+.skip_sep:
+        inc si
+
+.parse_number:
+        call parse_uint_es_si            ; AX=value, CF=0 if at least one digit
+        jc   .bad
+
+        cmp ax, 64
+        ja  .bad
+
+        mov [cs:mem_dispos_kb], ax
+        jmp .ok
+
+.ok_default:
+.ok:
+        pop es
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        clc
+        retn
+
+.bad:
+        pop es
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        stc
+        retn
+
+; ------------------------------------------------------------
+; Parse unsigned decimal number at ES:SI.
+; Stops at first non-digit.
+; 
+; output:
+;   AX = parsed value
+;   SI = after number
+;   CF = 0 if at least one digit
+;   CF = 1 if no digits
+;
+; destroys:
+;   BX,CX,DX
+; ------------------------------------------------------------
+
+parse_uint_es_si:
+        xor ax, ax
+        xor cx, cx                      ; digit count
+
+.next_digit:
+        mov dl, [es:si]
+        cmp dl, '0'
+        jb  .done
+        cmp dl, '9'
+        ja  .done
+
+        sub dl, '0'
+        xor dh, dh
+
+        ; AX = AX*10 + DX
+        mov bx, ax
+        shl ax, 1                       ; AX = 2x
+        shl bx, 1
+        shl bx, 1
+        shl bx, 1                       ; BX = 8x
+        add ax, bx                      ; AX = 10x
+        add ax, dx
+
+        inc si
+        inc cx
+        jmp .next_digit
+
+.done:
+        or cx, cx
+        jz .no_digits
+        clc
+        retn
+
+.no_digits:
+        stc
+        retn
 ; ───────────────────────────────────────────────────────────────────────────
 
 is_186_or_above:			
@@ -1651,7 +1875,6 @@ exit_on_error:
 		mov	word [es:bx+0Eh], 0	; К_нець резидентної частини --	0 байт в_д початку, тобто - не встановлювати.
 					; Але без коду "error" це дивно
 		jmp	exit_request
-; Interrupt_Routine_0 endp
 
 prn_banner:			
 		mov	ax, cs
@@ -1661,18 +1884,14 @@ prn_banner:
 		int	21h		; DOS -	PRINT STRING
 					; DS:DX	-> string terminated by	"$"
 		retn
-; prn_banner	endp
 
-prn_test:			
-		mov	ax, cs
-		mov	ds, ax
-		mov	ax, 900h
-		mov	dx, teststr ;	"\n\rExpanded memory emulator V1.0 by Geor"...
-		int	21h		; DOS -	PRINT STRING
-					; DS:DX	-> string terminated by	"$"
-		retn
-; prn_banner	endp
 
+bad_config_error:
+        call prn_banner
+        mov dx, aBadConfig
+        int 21h
+        jmp exit_on_error
+		
 ; ───────────────────────────────────────────────────────────────────────────
 aExpandedMemoryEmu db 0Ah		
 		db 0Dh,'Expanded memory emulator V1.0 by George Lefterov, Sofia, Decembe'
@@ -1699,11 +1918,7 @@ aTooHighTRSAddr	db 0Ah
 		db 0Ah
 		db 0Ah
 		db 0Dh,'$'
-		db    0
-		db    0
-		db    0
-		db    0
-teststr	db 0Ah			
-		db 'Test string 1',0Ah
-		db 0Ah
-		db 0Dh,'$'
+
+aBadConfig db 0Ah
+        db 'Bad IJUKOEMM configuration. Use /D:0../D:64.',0Ah,0Ah,0Ah,0Dh,'$'		
+		
