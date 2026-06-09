@@ -1874,10 +1874,9 @@ is_186_or_above:
 exit_on_error:				
 		mov	bx, [cs:ReqBlock_Off]
 		mov	es, [cs:ReqBlock_Seg]
-		mov	word [es:bx+3], 100Ch ; Strange error code: Done, no Error bit, but error code 0Ch = General failure
+		mov	word [es:bx+3], 810Ch ; Done + Error + General failure
 		mov	word [es:bx+10h], cs
 		mov	word [es:bx+0Eh], 0	; End of resident part: 0 bytes from the beginning, i.e. do not install.
-								; But without the Error bit this is strange.
 		jmp	exit_request
 
 prn_banner:			
