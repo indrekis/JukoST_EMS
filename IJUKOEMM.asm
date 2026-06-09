@@ -38,7 +38,7 @@ EMS_logic_pages_tbl dw 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh; 0
 		dw 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh; 9 ;
 		dw 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh; 18 ;
 		dw 0FFh			; 27 ; Descriptor:
-					; +0: logical_page_number within handle	або FFh	якщо стор_нка в_льна
+					; +0: logical_page_number within handle	або FFh	якщо сторінка вільна
 					; +1: handle id
 					; 4+24 = 28 records: 4 physical	slots +	16*24 =	384 Кб backing memory
 					;
@@ -547,7 +547,7 @@ int67_hndl:
 		mov	ds, bx
 ;		assume ds:seg000
 		mov	bx, EMS_funcs_table
-		mov	cl, ah		; Номер	EMS функц_ї з AH в CL
+		mov	cl, ah		; Номер	EMS функції з AH в CL
 		and	cl, 0F0h
 		cmp	cl, 40h	; '@'   ; Check if function code is 0x4y for any y
 ;		DBG_MARK 'G'
@@ -1013,7 +1013,7 @@ cont_calc_freepg:
 not_free_page1:			
 		inc	bl
 		inc	bl
-		cmp	bl, 36h	; '6'   ; 36h/2 = 18h = 27, останн_й елемент
+		cmp	bl, 36h	; '6'   ; 36h/2 = 18h = 27, останній елемент
 		jbe	short cont_calc_freepg
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1073,10 +1073,10 @@ inc_AL:
 ; ───────────────────────────────────────────────────────────────────────────
 ; Ймовірно, алгоритм:
 
-; 1. знайти backing copy стор_нки	DX
+; 1. знайти backing copy сторінки	DX
 ; 2. увімкнути JUKO alternate mapping через OUT E0h,1
 ; 3. записати назад у backing store всі 4	поточні	page-frame slots
-; 4. скоп_ювати потр_бну backing page у slot AL
+; 4. скопіювати потрібну backing page у slot AL
 ; 5. вимкнути JUKO alternate mapping через OUT E0h,0
 ; 6. оновити current page	map
 ; 7. перебудувати	alias-groups і синхронізувати дублікати
@@ -1602,7 +1602,7 @@ mapping_does_not_work:
 
 install_int_handlers:	
 		mov	ax, cs
-		cmp	ax, 1F3Fh	; Межа 128Кб --	куди плата в_дображає RAM
+		cmp	ax, 1F3Fh	; Межа 128Кб --	куди плата відображає RAM
 		jle	short we_are_lo_enough
 		call	prn_banner
 		mov	dx, aTooHighTRSAddr ; "\nCan't install: DOS offers too high add"...
@@ -1872,7 +1872,7 @@ exit_on_error:
 		mov	es, [cs:ReqBlock_Seg]
 		mov	word [es:bx+3], 100Ch ; Дивний код помилки:	Done, без Error, але є код помилки 0xC = General failure
 		mov	word [es:bx+10h], cs
-		mov	word [es:bx+0Eh], 0	; К_нець резидентної частини --	0 байт в_д початку, тобто - не встановлювати.
+		mov	word [es:bx+0Eh], 0	; Кінець резидентної частини --	0 байт від початку, тобто - не встановлювати.
 					; Але без коду "error" це дивно
 		jmp	exit_request
 
