@@ -32,23 +32,25 @@ EMS_funcs_table:
 		dw EMS_fn0C
 		dw EMS_fn0D
 		dw EMS_fn0E
-		dw exit_int67_handler_err     ; краще, ніж dw 0FFh
+		dw exit_int67_handler_err
 		
 EMS_logic_pages_tbl dw 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh; 0
 		dw 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh; 9 ;
 		dw 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh, 0FFh; 18 ;
 		dw 0FFh			; 27 ; Descriptor:
-					; +0: logical_page_number within handle	або FFh	якщо сторінка вільна
+					; +0: logical_page_number within handle, or FFh if the page is free
 					; +1: handle id
-					; 4+24 = 28 records: 4 physical	slots +	16*24 =	384 Кб backing memory
+					; 4+24 = 28 records: 4 physical	slots +	16*24 =	384 Kb backing memory
 					;
 handler_context_flags times 24 db 0		
 handler_page_maps times 192 db 0	
 EMS_slots_state	 times 4 db 0
+					; Synchronization groups for aliases:
+					; 0 - no alias conflict
+					; 1 - belongs to synchronization group 1
+					; 2 - belongs to synchronization group 2
 					; Групи	синхронізації для alisa:
 					; 0 - не має alias-конфлікту
-					; 1 - належить до групи	синхронізації 1
-					; 2 - належить до групи	синхронізації 2
 CRC_group1	dw 0			
 					
 CRC_group2	dw 0	
@@ -128,8 +130,8 @@ ISABUG_RESET         equ 0FFh
         push    dx
 
         mov     dx, ISABUG_IDX_PORT
-        out     dx, al              ; УВАГА: це НЕПРАВИЛЬНО для imm index
-                                    ; не використовувати напряму
+        out     dx, al              ; WARNING: this is wrong for an imm index
+									; do not use directly
         pop     dx
 %endmacro
 
@@ -523,7 +525,7 @@ exit_request:
 
 int67_hndl:				
 		cli
-		push	ds		; На момент виклику диспетчера в jmp [bx]:
+		push	ds  ; At dispatcher call time, before jmp [bx]:
 					; [bp+00] - BP
 					; [bp+02] - DI
 					; [bp+04] - SI
@@ -547,13 +549,13 @@ int67_hndl:
 		mov	ds, bx
 ;		assume ds:seg000
 		mov	bx, EMS_funcs_table
-		mov	cl, ah		; Номер	EMS функції з AH в CL
+		mov	cl, ah		    ; EMS function number from AH into CL
 		and	cl, 0F0h
 		cmp	cl, 40h	; '@'   ; Check if function code is 0x4y for any y
 ;		DBG_MARK 'G'
 		jnz	short short_exit_int67
 ;		DBG_MARK 'H'
-		xchg	al, ah		; Підфункція (або номер	сторінки, як для 44h, MAP MEMORY) з AL в AH
+		xchg	al, ah		; ; Subfunction, or page number for AH=44h MAP MEMORY, from AL into AH
 		mov	cl, ah
 		and	al, 0Fh
 		shl	al, 1
@@ -729,7 +731,7 @@ EMS_fn05:				; RELEASE HANDLE AND MEMORY
 		mov	dx, [bp+6]	; DX = EMM handle
 		or	dl, dl
 		jnz	short loc_2C9
-		mov	ah, 83h	; 'Г'   ; The memory manager can not find the handle specified.
+		mov	ah, 83h	    ; The memory manager can not find the handle specified.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
@@ -826,7 +828,7 @@ EMS_fn08:				; Restore Page Map
 		mov	si, handler_context_flags
 		cmp	byte [cs:bx+si], 0
 		jnz	short loc_361
-		mov	ah, 8Eh	; 'О'   ; The mapping register context stack does not have
+		mov	ah, 8Eh	; The mapping register context stack does not have
 					; a context associated with the	handle.	The program
 					; has attempted	to restore the mapping register
 					; context when there was no context for	the handle
@@ -1013,7 +1015,7 @@ cont_calc_freepg:
 not_free_page1:			
 		inc	bl
 		inc	bl
-		cmp	bl, 36h	; '6'   ; 36h/2 = 18h = 27, останній елемент
+		cmp	bl, 36h	; 36h/2 = 18h = 27, last element
 		jbe	short cont_calc_freepg
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1071,26 +1073,28 @@ inc_AL:
 		inc	al
 		jmp	short to_next_handler
 ; ───────────────────────────────────────────────────────────────────────────
-; Ймовірно, алгоритм:
+; Probable algorithm:
+;
+; 1. Find the backing copy of page DX.
+; 2. Enable JUKO alternate mapping with OUT E0h,1.
+; 3. Write back all 4 current page-frame slots to the backing store.
+; 4. Copy the requested backing page into slot AL.
+; 5. Disable JUKO alternate mapping with OUT E0h,0.
+; 6. Update the current page map.
+; 7. Rebuild alias groups and synchronize duplicates.
 
-; 1. знайти backing copy сторінки	DX
-; 2. увімкнути JUKO alternate mapping через OUT E0h,1
-; 3. записати назад у backing store всі 4	поточні	page-frame slots
-; 4. скопіювати потрібну backing page у slot AL
-; 5. вимкнути JUKO alternate mapping через OUT E0h,0
-; 6. оновити current page	map
-; 7. перебудувати	alias-groups і синхронізувати дублікати
+; AL = physical EMS frame/page-frame slot: 0..3
+;
+; DX = logical (backing) EMS-page
+; DH = handle
+;
+; DL = logical page number within handle
+;
+; Saves	previous contents to the backing store
 
 map_EMS_page_to_frame:			
-		mov	di, EMS_logic_pages_tbl ; AL = physical EMS frame/page-frame slot: 0..3
-					;
-					; DX = logical (backing) EMS-page
-					; DH = handle
-					;
-					; DL = logical page number within handle
-					;
-					; Saves	previous contents to the backing store
-		or	dh, dh		; Тут DH не мав	би бути	нульовим
+		mov	di, EMS_logic_pages_tbl 
+		or	dh, dh  ; DH should not be zero here
 		jnz	short DH_OK
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1174,7 +1178,7 @@ found_free_slot:
 		mov	di, segs_for_EMS_frames
 		mov	bl, ah		; AH --	backing	page index
 		shl	bl, 1
-		mov	ds, word [cs:bx+di]	; Baking page segment to DS
+		mov	ds, word [cs:bx+di]	; Backing page segment to DS
 		mov	bl, al		; Logical EMS frame in upper 64Kb
 		shl	bl, 1
 		mov	es, word [cs:bx+di]	; ES --	logical	EMS segment
@@ -1522,7 +1526,7 @@ copy_mem1:
 		mov	ds, word [cs:bx+di]
 		xor	di, di
 		xor	si, si
-		mov	cx, 2000h	; 2000h	words =	16Кб, EMS frame
+		mov	cx, 2000h	; 2000h	words =	16 Kb, EMS frame
 		cld 
 		rep movsw
 		retn
@@ -1535,7 +1539,7 @@ calc_CRC:
 		mov	bl, dl
 		shl	bl, 1
 		mov	ds, word [cs:bx+si]
-		mov	cx, 3FFEh	; 16Кб
+		mov	cx, 3FFEh	; 16 Kb
 		xor	ax, ax
 
 CRC_loop1:				
@@ -1572,17 +1576,17 @@ is_86_88:
 		mov	ds, ax
 ;		assume ds:nothing
 		xor	al, al
-		out	0E0h, al	; Стандартне відображення
-		mov	word [ds:0FFFEh], 6996h ; Останнє слово області 128 Кб + (відмаплених)384 Кб
+		out	0E0h, al	; Standard mapping
+		mov	word [ds:0FFFEh], 6996h ; Last word of the 128 Kb area + mapped 384 Kb
 		inc	al
-		out	0E0h, al	; Відобразити додаткову	пам'ять
+		out	0E0h, al	; Map additional memory
 		mov	word [ds:0FFFEh], 9669h
 		xor	al, al
-		out	0E0h, al	; Стандартне відображення
+		out	0E0h, al	; Standard mapping
 		cmp	word [ds:0FFFEh], 6996h
 		jnz	short mapping_does_not_work
 		inc	al
-		out	0E0h, al	; Відобразити додаткову	пам'ять
+		out	0E0h, al	; Map additional memory / alternate mapping 
 		cmp	word [ds:0FFFEh], 9669h
 		mov	al, 0
 		out	0E0h, al
@@ -1602,7 +1606,7 @@ mapping_does_not_work:
 
 install_int_handlers:	
 		mov	ax, cs
-		cmp	ax, 1F3Fh	; Межа 128Кб --	куди плата відображає RAM
+		cmp	ax, 1F3Fh	; 128 Kb boundary -- where the board maps RAM
 		jle	short we_are_lo_enough
 		call	prn_banner
 		mov	dx, aTooHighTRSAddr ; "\nCan't install: DOS offers too high add"...
@@ -1614,7 +1618,7 @@ we_are_lo_enough:
 		mov	ds, ax
 ;		assume ds:nothing
 		cmp	word [ds:0], 6996h
-		jz	short we_have_upper_64Kb ; Відкусуємо верхні 64 Кб
+		jz	short we_have_upper_64Kb ; The upper 64 Kb has already been reserved
 		mov	word [ds:0], 6996h		
 		xor	ax, ax
 		mov	ds, ax
@@ -1870,10 +1874,10 @@ is_186_or_above:
 exit_on_error:				
 		mov	bx, [cs:ReqBlock_Off]
 		mov	es, [cs:ReqBlock_Seg]
-		mov	word [es:bx+3], 100Ch ; Дивний код помилки:	Done, без Error, але є код помилки 0xC = General failure
+		mov	word [es:bx+3], 100Ch ; Strange error code: Done, no Error bit, but error code 0Ch = General failure
 		mov	word [es:bx+10h], cs
-		mov	word [es:bx+0Eh], 0	; Кінець резидентної частини --	0 байт від початку, тобто - не встановлювати.
-					; Але без коду "error" це дивно
+		mov	word [es:bx+0Eh], 0	; End of resident part: 0 bytes from the beginning, i.e. do not install.
+								; But without the Error bit this is strange.
 		jmp	exit_request
 
 prn_banner:			
