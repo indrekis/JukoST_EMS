@@ -1130,11 +1130,10 @@ Strategy_Routine_0: ; proc	far
 		mov	[cs:ReqBlock_Seg], es ; ES:BX -> Device Request Block
 		mov	[cs:ReqBlock_Off], bx
 		retf
-; Strategy_Routine_0 endp
 
 
 Interrupt_Routine_0:		
-		push	ds		; Device Request Block:
+		push	ds	; Device Request Block:
 					; 0 db length
 					; 1 db unit number
 					; 2 db command code
@@ -1172,17 +1171,6 @@ exit_request:
 		pop	ds
 		retf
 ; ───────────────────────────────────────────────────────────────────────────
-; Helped to debug stack problem but are not required and are suboptimal 
-; enable_trans:
-;		mov	al, 1
-;		out	0E0h, al
-;		retn
-
-;disable_trans:		
-;		xor	al, al
-;		out	0E0h, al
-;		retn
-
 %macro ENABLE_TRANS 0
         mov     al, 1
         out     0E0h, al
@@ -1249,7 +1237,6 @@ int67_hndl:
 ;		DBG_MARK 'R'
 		mov	bx, cs
 		mov	ds, bx
-;		assume ds:seg000
 		mov	bx, EMS_funcs_table
 		mov	cl, ah		    ; EMS function number from AH into CL
 		and	cl, 0F0h
@@ -1720,11 +1707,9 @@ exit_int67_handler:
 		
 		RESTORE_CALLER_STACK 
 		mov ax, [cs:int67_ret_ax]
-;		assume ds:nothing
 		iret
 ; ───────────────────────────────────────────────────────────────────────────
 int67_ret_ax dw 0
-
 
 calc_free_pages:			
 		mov	di, EMS_logic_pages_tbl
@@ -1759,7 +1744,7 @@ cont_calc1:
 not_found1:				
 		inc	bl
 		inc	bl
-		cmp	bl, 36h	; '6'   ; Until the table end
+		cmp	bl, 36h	; Until the table end
 		jbe	short cont_calc1
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1783,12 +1768,12 @@ cont_search1:
 not_our_handler:			
 		inc	bl
 		inc	bl
-		cmp	bl, 36h	; '6'   ;  Until the table end
+		cmp	bl, 36h	; Until the table end
 		jbe	short cont_search1
 
 to_next_handler:			
 		inc	cl
-		cmp	cl, 1Ch		; 28 decimal...
+		cmp	cl, 1Ch	; 28 decimal...
 		jbe	short cont_calc2
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1851,8 +1836,6 @@ we_found_entry1:
 		
 		mov	bl, al		; BL - destination slot
 		ENABLE_TRANS    ; Map Juko additional memory
-;		mov	al, 1
-;		out	0E0h, al	
 		mov	al, bl		; AL - destination slot
 		xor	bx, bx
 
@@ -1918,13 +1901,10 @@ found_free_slot:
 
 		mov	bl, al
 		DISABLE_TRANS ; Return traditional mapping
-		; xor	al, al
-		; out	0E0h, al	
 		mov	al, bl
 		mov	di, EMS_logic_pages_tbl
 		mov	cx, cs
 		mov	ds, cx
-;		assume ds:seg000
 		mov	bl, ah
 		shl	bl, 1
 		mov	cx, [bx+di]
@@ -2304,25 +2284,15 @@ is_86_88:
 		mov	ax, 7000h
 		mov	ds, ax
 ;		assume ds:nothing
-		; xor	al, al
-		; out	0E0h, al	; Standard mapping
 		DISABLE_TRANS  ; Standard mapping
 		mov	word [ds:0FFFEh], 6996h ; Last word of the 128 Kb area + mapped 384 Kb
-		; inc	al
-		; out	0E0h, al	; Map additional memory
 		ENABLE_TRANS        ; Map additional memory
 		mov	word [ds:0FFFEh], 9669h
-		; xor	al, al
-		; out	0E0h, al	; Standard mapping
 		DISABLE_TRANS  ; Standard mapping
 		cmp	word [ds:0FFFEh], 6996h
 		jnz	short mapping_does_not_work
-		; inc	al
-		; out	0E0h, al	; Map additional memory / alternate mapping 
 		ENABLE_TRANS        ; Map additional memory  / alternate mapping 
 		cmp	word [ds:0FFFEh], 9669h
-		; mov	al, 0
-		; out	0E0h, al
 		DISABLE_TRANS  ; Standard mapping
 		jnz	short mapping_does_not_work
 		xor	ax, ax
