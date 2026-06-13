@@ -3,7 +3,7 @@
 ;   nasm -f bin emstest.asm -o EMSTEST.COM
 
 bits 16
-
+cpu 8086
 org 100h
 
 EMS_PAGE_WORDS equ 2000h      ; 16 KB / 2
@@ -159,16 +159,16 @@ start:
     mov dx, msg_ok_alias_map
     call print
 
-; Write new pattern 3333h through slot 1.
+; Write new non-uniform pattern 3333h,3334h,... through slot 1.
     mov di, EMS_PAGE_BYTES
     mov ax, 3333h
-    call fill_16k
+    call fill_16k_incrementing
 
     mov dx, msg_ok_alias_write
     call print
 
 ; Map logical page 0 back into physical page 0.
-; It should preserve the 3333h data.
+; It should preserve the data written through the alias slot.
     mov ah, 44h
     mov al, 0
     mov bx, 0
@@ -180,10 +180,10 @@ start:
     mov dx, msg_ok_alias_back
     call print
 
-; Verify slot 0 now contains 3333h.
+; Verify slot 0 now contains the non-uniform pattern 3333h,3334h,...
     xor di, di
     mov ax, 3333h
-    call verify_16k
+    call verify_16k_incrementing
     jc fail_alias_verify
 
     mov dx, msg_ok_alias_verify
@@ -222,6 +222,28 @@ fill_16k:
     ret
 
 ; ------------------------------------------------------------
+; fill_16k_incrementing
+; IN:
+;   ES:DI = destination page-frame slot
+;   AX    = first word pattern
+; OUT:
+;   none
+; ------------------------------------------------------------
+fill_16k_incrementing:
+    push cx
+    push di
+    mov cx, EMS_PAGE_WORDS
+
+.fill_loop:
+    stosw
+    inc ax
+    loop .fill_loop
+
+    pop di
+    pop cx
+    ret
+
+; ------------------------------------------------------------
 ; verify_16k
 ; IN:
 ;   ES:DI = page-frame slot
@@ -239,6 +261,38 @@ verify_16k:
     cmp [es:di], ax
     jne .bad
     add di, 2
+    loop .verify_loop
+
+    clc
+    pop di
+    pop cx
+    ret
+
+.bad:
+    stc
+    pop di
+    pop cx
+    ret
+
+; ------------------------------------------------------------
+; verify_16k_incrementing
+; IN:
+;   ES:DI = page-frame slot
+;   AX    = first expected word pattern
+; OUT:
+;   CF=0 ok
+;   CF=1 mismatch
+; ------------------------------------------------------------
+verify_16k_incrementing:
+    push cx
+    push di
+    mov cx, EMS_PAGE_WORDS
+
+.verify_loop:
+    cmp [es:di], ax
+    jne .bad
+    add di, 2
+    inc ax
     loop .verify_loop
 
     clc
