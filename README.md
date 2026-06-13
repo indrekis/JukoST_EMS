@@ -63,12 +63,12 @@ NASM for Windows is included in the repo for convenience. LST file in not requir
 
 ## Current status
 
-The reconstructed driver has been tested with CheckIt 2, 3, and 4, and with Microsoft Word and Excel under Windows 3.0, both in 86Box and on real hardware. Word currently appears to hang on real hardware.
+The reconstructed driver has been successfully tested with CheckIt 2, 3, and 4, several other DOS applications and with Microsoft Word and Excel under Windows 3.0, both in 86Box and on real hardware.
 
 
 Several small features were added:
 
-- Two types of debug support -- for the [86Box ISABugger debug facility](https://86box.readthedocs.io/en/latest/hardware/isabugger.html) and by writing directly to B800:0000 text video memory.
+- Two types of debug support -- for the [86Box ISABugger debug facility](https://86box.readthedocs.io/en/latest/hardware/isabugger.html) and by writing directly to video memory. Supported are text mode (using the B800:0000), CGA and VGA mode 13h. Graphical debug output code, including the custom font were mostly AI-generated, though tested. This is auxiliary code, absent from the production build. Current end of the debug text ring buffer is marked by a rectangle, registers printing added.
 
 - Added dynamic support for systems with slightly less than exactly 640 Kb conventional memory available. This is important, e.g. for the XT IDE, requiring 1 Kb RAM for its needs and leaving 639 Kb for the DOS.  
 
@@ -77,12 +77,10 @@ To change the memory size, use configuration option ``/D:nn`` -- see details abo
 Several more or less small fixes were made:
 
 - The dispatch for EMS functions AH=4Bh and AH=4Ch was corrected -- these two handlers appear to have been swapped in the original driver.
-
 - Added correct handling of the unsupported AH=4Fh function.
-
 - Added checks for several corner cases while searching the page tables, possibly redundant.
-
 - Instruction ``cld`` added before the ``rep movsw`` -- I hope it is required because AFAIK no calling convention ensures this flag state.
+- Int 67h handler switches to its own stack -- using current stack of the calling software is a major bug, because sometimes stack is in the switched memory region.
 
 
 ## Technical details 
