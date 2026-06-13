@@ -68,38 +68,588 @@ segs_for_EMS_frames dw 9000h, 9400h, 9800h, 9C00h
 					dw 5000h, 5400h, 5800h, 5C00h
 					dw 6000h, 6400h, 6800h, 6C00h
 					dw 7000h, 7400h, 7800h, 7C00h
-
+	
 ; %define B8000_DEBUG_TRACE 1
 ; %define A86BOX_ISABUGGER_TRACE 1
 
 %ifdef B8000_DEBUG_TRACE
+
+; ------------------------------------------------------------
+; Direct screen debug output for text/CGA/VGA mode 13h.
+;
+; This is deliberately BIOS-free, because DBG_MARK is used from
+; INT 67h / INT 21h related paths where INT 10h is unsafe.
+; ------------------------------------------------------------
+
 dbg_pos db 0
+dbg_video_mode db 0
+
+; Expand one 4-bit monochrome nibble into one CGA 320x200 byte:
+; bit set -> pixel color 3, bit clear -> pixel color 0.
+; Input nibble order: bit 3 is the leftmost pixel.
+dbg_cga2_expand:
+        db 00000000b, 00000011b, 00001100b, 00001111b
+        db 00110000b, 00110011b, 00111100b, 00111111b
+        db 11000000b, 11000011b, 11001100b, 11001111b
+        db 11110000b, 11110011b, 11111100b, 11111111b
+
+; 8x8 debug font, one byte per scanline, bit 7 is the leftmost pixel.
+; Glyph set: '0'..'9', 'A'..'Z'. Unknown characters use '?'.
+dbg_font_digits:
+        db 3Ch,66h,6Eh,76h,66h,66h,3Ch,00h ; 0
+        db 18h,38h,18h,18h,18h,18h,7Eh,00h ; 1
+        db 3Ch,66h,06h,0Ch,18h,30h,7Eh,00h ; 2
+        db 3Ch,66h,06h,1Ch,06h,66h,3Ch,00h ; 3
+        db 0Ch,1Ch,3Ch,6Ch,7Eh,0Ch,0Ch,00h ; 4
+        db 7Eh,60h,7Ch,06h,06h,66h,3Ch,00h ; 5
+        db 1Ch,30h,60h,7Ch,66h,66h,3Ch,00h ; 6
+        db 7Eh,66h,06h,0Ch,18h,18h,18h,00h ; 7
+        db 3Ch,66h,66h,3Ch,66h,66h,3Ch,00h ; 8
+        db 3Ch,66h,66h,3Eh,06h,0Ch,38h,00h ; 9
+
+dbg_font_letters:
+        db 18h,3Ch,66h,66h,7Eh,66h,66h,00h ; A
+        db 7Ch,66h,66h,7Ch,66h,66h,7Ch,00h ; B
+        db 3Ch,66h,60h,60h,60h,66h,3Ch,00h ; C
+        db 78h,6Ch,66h,66h,66h,6Ch,78h,00h ; D
+        db 7Eh,60h,60h,7Ch,60h,60h,7Eh,00h ; E
+        db 7Eh,60h,60h,7Ch,60h,60h,60h,00h ; F
+        db 3Ch,66h,60h,6Eh,66h,66h,3Ch,00h ; G
+        db 66h,66h,66h,7Eh,66h,66h,66h,00h ; H
+        db 7Eh,18h,18h,18h,18h,18h,7Eh,00h ; I
+        db 1Eh,0Ch,0Ch,0Ch,0Ch,6Ch,38h,00h ; J
+        db 66h,6Ch,78h,70h,78h,6Ch,66h,00h ; K
+        db 60h,60h,60h,60h,60h,60h,7Eh,00h ; L
+        db 63h,77h,7Fh,6Bh,63h,63h,63h,00h ; M
+        db 66h,76h,7Eh,7Eh,6Eh,66h,66h,00h ; N
+        db 3Ch,66h,66h,66h,66h,66h,3Ch,00h ; O
+        db 7Ch,66h,66h,7Ch,60h,60h,60h,00h ; P
+        db 3Ch,66h,66h,66h,6Eh,6Ch,36h,00h ; Q
+        db 7Ch,66h,66h,7Ch,78h,6Ch,66h,00h ; R
+        db 3Ch,66h,60h,3Ch,06h,66h,3Ch,00h ; S
+        db 7Eh,18h,18h,18h,18h,18h,18h,00h ; T
+        db 66h,66h,66h,66h,66h,66h,3Ch,00h ; U
+        db 66h,66h,66h,66h,66h,3Ch,18h,00h ; V
+        db 63h,63h,63h,6Bh,7Fh,77h,63h,00h ; W
+        db 66h,66h,3Ch,18h,3Ch,66h,66h,00h ; X
+        db 66h,66h,66h,3Ch,18h,18h,18h,00h ; Y
+        db 7Eh,06h,0Ch,18h,30h,60h,7Eh,00h ; Z
+
+dbg_font_unknown:
+        db 3Ch,66h,06h,0Ch,18h,00h,18h,00h ; ?
+
+dbg_font_cursor:
+        db 7Eh,42h,42h,42h,42h,42h,7Eh,00h ; hollow cursor rectangle
+
+; Extra punctuation used by register debug output.
+dbg_font_equal:
+        db 00h,00h,7Eh,00h,7Eh,00h,00h,00h ; =
+dbg_font_colon:
+        db 00h,18h,18h,00h,00h,18h,18h,00h ; :
+dbg_font_dash:
+        db 00h,00h,00h,7Eh,00h,00h,00h,00h ; -
+dbg_font_space:
+        db 00h,00h,00h,00h,00h,00h,00h,00h ; space
+
+; ------------------------------------------------------------
+; dbg_get_glyph
+;
+; Input:
+;   DL = ASCII marker
+;   DS = CS
+;
+; Output:
+;   SI = glyph offset in CS
+;
+; Destroys:
+;   AX
+; ------------------------------------------------------------
+
+dbg_get_glyph:
+        mov     al, dl
+
+        ; uppercase ASCII a..z
+        cmp     al, 'a'
+        jb      .not_lower
+        cmp     al, 'z'
+        ja      .not_lower
+        and     al, 0DFh
+        mov     dl, al
+
+.not_lower:
+        cmp     al, '='
+        je      .equal
+        cmp     al, ':'
+        je      .colon
+        cmp     al, '-'
+        je      .dash
+        cmp     al, ' '
+        je      .space
+
+        cmp     al, '0'
+        jb      .try_letter
+        cmp     al, '9'
+        ja      .try_letter
+        sub     al, '0'
+        xor     ah, ah
+        shl     ax, 1
+        shl     ax, 1
+        shl     ax, 1              ; AX = index * 8
+        mov     si, dbg_font_digits
+        add     si, ax
+        retn
+
+.try_letter:
+        cmp     al, 'A'
+        jb      .unknown
+        cmp     al, 'Z'
+        ja      .unknown
+        sub     al, 'A'
+        xor     ah, ah
+        shl     ax, 1
+        shl     ax, 1
+        shl     ax, 1              ; AX = index * 8
+        mov     si, dbg_font_letters
+        add     si, ax
+        retn
+
+.equal:
+        mov     si, dbg_font_equal
+        retn
+
+.colon:
+        mov     si, dbg_font_colon
+        retn
+
+.dash:
+        mov     si, dbg_font_dash
+        retn
+
+.space:
+        mov     si, dbg_font_space
+        retn
+
+.unknown:
+        mov     si, dbg_font_unknown
+        retn
+
+; ------------------------------------------------------------
+; dbg_draw_cga_glyph
+;
+; Input:
+;   ES = B800h
+;   SI = glyph offset in CS
+;   BL = glyph position
+;   [cs:dbg_video_mode] = 04h/05h/06h
+;
+; Destroys:
+;   AX,BX,CX,DX,DI,BP,SI
+; ------------------------------------------------------------
+
+dbg_draw_cga_glyph:
+        xor     bh, bh
+
+        cmp     byte [cs:dbg_video_mode], 06h
+        je      .pos_640
+
+        ; 320x200: 8 pixels = 2 bytes, 40 glyphs fit across.
+        and     bl, 1Fh             ; 0..31, conservative wrap
+        shl     bx, 1
+        jmp     short .have_xbyte
+
+.pos_640:
+        ; 640x200: 8 pixels = 1 byte, 80 glyphs fit across.
+        and     bl, 3Fh             ; 0..63, conservative wrap
+
+.have_xbyte:
+        mov     bp, bx              ; BP = x byte offset
+        xor     dx, dx              ; DL = row 0..7
+
+.row_loop:
+        ; Compute CGA offset for scanline DL:
+        ; even lines: B800:0000 + (y/2)*80 + x
+        ; odd  lines: B800:2000 + (y/2)*80 + x
+
+        xor     di, di
+        mov     al, dl
+        xor     ah, ah
+        shr     ax, 1               ; y / 2
+
+        mov     di, ax
+        mov     cl, 6
+        shl     di, cl              ; *64
+        mov     bx, ax
+        mov     cl, 4
+        shl     bx, cl              ; *16
+        add     di, bx              ; *80
+
+        test    dl, 1
+        jz      .even
+        add     di, 2000h
+
+.even:
+        add     di, bp
+
+        mov     al, [cs:si]         ; glyph row bits
+
+        cmp     byte [cs:dbg_video_mode], 06h
+        jne     .row_320
+
+        ; Mode 06h: one glyph row byte maps directly to 8 pixels.
+        mov     [es:di], al
+        jmp     short .next_row
+
+.row_320:
+        ; Modes 04h/05h: expand each glyph bit to a 2-bit color-3 pixel.
+        mov     ah, al
+        mov     bl, al
+        xor     bh, bh
+        shr     bl, 1
+        shr     bl, 1
+        shr     bl, 1
+        shr     bl, 1               ; high nibble
+        mov     al, [cs:dbg_cga2_expand+bx]
+
+        mov     bl, ah
+        xor     bh, bh
+        and     bl, 0Fh             ; low nibble
+        mov     ah, [cs:dbg_cga2_expand+bx]
+
+        mov     [es:di], ax
+
+.next_row:
+        inc     si
+        inc     dl
+        cmp     dl, 8
+        jb      .row_loop
+
+        retn
+
+; ------------------------------------------------------------
+; dbg_draw_vga13_glyph
+;
+; Input:
+;   ES = A000h
+;   SI = glyph offset in CS
+;   BL = glyph position
+;
+; Destroys:
+;   AX,BX,CX,DX,DI,BP,SI
+; ------------------------------------------------------------
+
+dbg_draw_vga13_glyph:
+        xor     bh, bh
+        and     bl, 1Fh             ; 0..31 glyphs across
+
+        ; x = pos * 8
+        mov     cl, 3
+        shl     bx, cl
+        mov     bp, bx              ; BP = base x offset
+
+        xor     dx, dx              ; DL = row 0..7
+
+.row_loop:
+        mov     di, dx
+        mov     cl, 6
+        shl     di, cl              ; row * 64
+        mov     bx, dx
+        mov     cl, 8
+        shl     bx, cl              ; row * 256
+        add     di, bx              ; row * 320
+        add     di, bp              ; + x
+
+        mov     ah, [cs:si]         ; AH = glyph row pattern
+        mov     cx, 8
+
+.pixel_loop:
+        shl     ah, 1               ; next glyph bit -> CF
+        mov     al, 00h
+        jnc     .store
+        mov     al, 0Fh
+
+.store:
+        stosb
+        loop    .pixel_loop
+
+        inc     si
+        inc     dl
+        cmp     dl, 8
+        jb      .row_loop
+
+        retn
+
+; ------------------------------------------------------------
+; dbg_hex_digit
+;
+; Input:
+;   AL low nibble = 0..0Fh
+;
+; Output:
+;   Emits one hexadecimal digit through dbg_mark.
+;
+; Destroys:
+;   AL
+; ------------------------------------------------------------
+
+dbg_hex_digit:
+        and     al, 0Fh
+        cmp     al, 9
+        jbe     .decimal
+        add     al, 'A' - 10
+        jmp     short .emit
+
+.decimal:
+        add     al, '0'
+
+.emit:
+        call    dbg_mark
+        retn
+
+; ------------------------------------------------------------
+; dbg_hex8
+;
+; Input:
+;   AL = byte to print as two hexadecimal digits
+;
+; Preserves:
+;   AX,CX
+; ------------------------------------------------------------
+
+dbg_hex8:
+        push    ax
+        push    cx
+
+        mov     ah, al              ; AH = original byte
+
+        mov     al, ah
+        mov     cl, 4
+        shr     al, cl              ; high nibble
+        call    dbg_hex_digit
+
+        mov     al, ah
+        call    dbg_hex_digit       ; low nibble
+
+        pop     cx
+        pop     ax
+        retn
+
+; ------------------------------------------------------------
+; dbg_hex16
+;
+; Input:
+;   AX = word to print as four hexadecimal digits
+;
+; Preserves:
+;   AX,BX
+; ------------------------------------------------------------
+
+dbg_hex16:
+        push    ax
+        push    bx
+
+        mov     bx, ax
+
+        mov     al, bh
+        call    dbg_hex8
+
+        mov     al, bl
+        call    dbg_hex8
+
+        pop     bx
+        pop     ax
+        retn
+
+; ------------------------------------------------------------
+; dbg_mark
+;
+; Input:
+;   AL = marker byte, usually ASCII: '0', '1', 'Z', etc.
+;
+; The routine writes the marker at dbg_pos, advances dbg_pos,
+; then draws a cursor marker at the next position. Therefore,
+; after a hang the last completed DBG_MARK is immediately before
+; the cursor rectangle.
+;
+; Supports:
+;   text modes 00h..03h, 07h  -> text memory
+;   CGA graphics 04h,05h,06h  -> B800 graphics memory
+;   VGA mode 13h              -> A000 linear framebuffer
+;
+; Does nothing in planar EGA/VGA modes 0Dh/0Eh/0Fh/10h/12h.
+;
+; Preserves:
+;   AX,BX,CX,DX,SI,DI,DS,ES,BP
+; ------------------------------------------------------------
+
+DBG_TEXT_ROW        equ 0
+DBG_TEXT_COL        equ 0
+DBG_TEXT_WIDTH      equ 79       ; 79 printable positions + cursor
+DBG_TEXT_ATTR       equ 1Eh
+DBG_TEXT_CURSOR_ATR equ 70h	
 
 dbg_mark:
-        push ax
-        push bx
-        push es
+        push    ax
+        push    bx
+        push    cx
+        push    dx
+        push    si
+        push    di
+        push    ds
+        push    es
+        push    bp
 
-        mov     bx, 0B800h       ; CGA/EGA/VGA text memory
-        mov     es, bx
+        mov     dl, al              ; DL = marker byte
 
-        xor     bh, bh
+        ; Read current video mode from BIOS Data Area:
+        ; 0040:0049 = current video mode
+        mov     ax, 0040h
+        mov     ds, ax
+        mov     dh, [0049h]         ; DH = current video mode
+        mov     [cs:dbg_video_mode], dh
+
+        mov     ax, cs
+        mov     ds, ax
+        call    dbg_get_glyph       ; SI = CS:font glyph
+
+        cmp     byte [cs:dbg_video_mode], 03h
+        jbe     .text_color
+
+        cmp     byte [cs:dbg_video_mode], 07h
+        je      .text_mono
+
+        cmp     byte [cs:dbg_video_mode], 04h
+        jb      .done
+        cmp     byte [cs:dbg_video_mode], 06h
+        jbe     .cga_graphics
+
+        cmp     byte [cs:dbg_video_mode], 13h
+        je      .vga_13h
+
+        jmp     .done
+
+; ------------------------------------------------------------
+; Text modes 00h..03h: color text memory B800
+; ------------------------------------------------------------
+
+.text_color:
+        mov     ax, 0B800h
+        mov     es, ax
+        jmp     short .text_common
+
+; ------------------------------------------------------------
+; Text mode 07h: monochrome text memory B000
+; ------------------------------------------------------------
+
+.text_mono:
+        mov     ax, 0B000h
+        mov     es, ax
+	
+		
+.text_common:
+        ; ES already points to B800h or B000h
+
+        ; BX = row*160 + col*2
+        xor     bx, bx
         mov     bl, [cs:dbg_pos]
-        and     bl, 0Fh          ; 16 positions
+
+        cmp     bl, DBG_TEXT_WIDTH
+        jb      .text_pos_ok
+        xor     bl, bl
+        mov     [cs:dbg_pos], bl
+
+.text_pos_ok:
+        ; offset = row*160 + (DBG_TEXT_COL + dbg_pos)*2
+        xor     bh, bh
+        add     bl, DBG_TEXT_COL
         shl     bx, 1
+%if DBG_TEXT_ROW != 0
+        add     bx, DBG_TEXT_ROW * 160
+%endif
 
-        ; row 0, col 64 + dbg_pos
-        add     bx, 64*2
-
-        mov     ah, 1Eh          ; yellow on blue-ish / visible attribute
+        ; draw actual character
+        mov     al, dl              ; marker char
+        mov     ah, DBG_TEXT_ATTR
         mov     [es:bx], ax
+
+        ; advance dbg_pos
+        inc     byte [cs:dbg_pos]
+        cmp     byte [cs:dbg_pos], DBG_TEXT_WIDTH
+        jb      .text_cursor_pos_ok
+        mov     byte [cs:dbg_pos], 0
+
+.text_cursor_pos_ok:
+        ; draw cursor at next write position
+        xor     bx, bx
+        mov     bl, [cs:dbg_pos]
+        add     bl, DBG_TEXT_COL
+        shl     bx, 1
+%if DBG_TEXT_ROW != 0
+        add     bx, DBG_TEXT_ROW * 160
+%endif
+
+        mov     al, ' '
+        mov     ah, DBG_TEXT_CURSOR_ATR
+        mov     [es:bx], ax
+
+        jmp     .done
+
+; ------------------------------------------------------------
+; CGA graphics modes:
+;   04h/05h = 320x200, 2 bits per pixel, B800
+;   06h     = 640x200, 1 bit per pixel, B800
+;
+; Draws an 8x8 glyph and then a hollow cursor rectangle
+; at the next write position.
+; ------------------------------------------------------------
+
+.cga_graphics:
+        mov     ax, 0B800h
+        mov     es, ax
+
+        mov     bl, [cs:dbg_pos]
+        call    dbg_draw_cga_glyph
 
         inc     byte [cs:dbg_pos]
 
+        mov     si, dbg_font_cursor
+        mov     bl, [cs:dbg_pos]
+        call    dbg_draw_cga_glyph
+
+        jmp     .done
+
+; ------------------------------------------------------------
+; VGA mode 13h:
+;   320x200, 256 colors, linear framebuffer A000:0000
+;
+; Draws an 8x8 glyph and then a hollow cursor rectangle
+; at the next write position.
+; ------------------------------------------------------------
+
+.vga_13h:
+        mov     ax, 0A000h
+        mov     es, ax
+
+        mov     bl, [cs:dbg_pos]
+        call    dbg_draw_vga13_glyph
+
+        inc     byte [cs:dbg_pos]
+
+        mov     si, dbg_font_cursor
+        mov     bl, [cs:dbg_pos]
+        call    dbg_draw_vga13_glyph
+
+.done:
+        pop     bp
         pop     es
+        pop     ds
+        pop     di
+        pop     si
+        pop     dx
+        pop     cx
         pop     bx
         pop     ax
         ret
+
 %endif
 
 %ifdef A86BOX_ISABUGGER_TRACE
@@ -457,17 +1007,120 @@ ISABUG_RESET         equ 0FFh
 %ifdef B8000_DEBUG_TRACE
 
 %macro DBG_MARK 1
-		pushf 
-		push AX
+        pushf
+        push    ax
         mov     al, %1
         call    dbg_mark
-		pop  AX
-		popf 
+        pop     ax
+        popf
+%endmacro
+
+; Emit an immediate/register/memory byte as two hex digits.
+; Examples:
+;   DBG_HEX8 al
+;   DBG_HEX8 ah
+;   DBG_HEX8 byte [cs:some_var]
+%macro DBG_HEX8 1
+        pushf
+        push    ax
+        mov     al, %1
+        call    dbg_hex8
+        pop     ax
+        popf
+%endmacro
+
+; Emit an immediate/register/memory word as four hex digits.
+; Examples:
+;   DBG_HEX16 ax
+;   DBG_HEX16 bx
+;   DBG_HEX16 word [bp+0Ah]
+%macro DBG_HEX16 1
+        pushf
+        push    ax
+        mov     ax, %1
+        call    dbg_hex16
+        pop     ax
+        popf
+%endmacro
+
+; Emit two-letter register name, '=', and a 16-bit value.
+; Examples:
+;   DBG_REG16 'A','X', ax        ; AX=1234
+;   DBG_REG16 'B','X', bx        ; BX=1234
+;   DBG_REG16 'D','S', ds        ; DS=1234
+;   DBG_REG16 'S','P', sp        ; SP=1234
+%macro DBG_REG16 3
+        DBG_MARK %1
+        DBG_MARK %2
+;        DBG_MARK '='
+        DBG_HEX16 %3
+%endmacro
+
+; Emit a compact separator between debug fields.
+; Examples:
+;   DBG_SEP
+;   DBG_REG16 'A','X', ax
+;   DBG_SEP
+;   DBG_REG16 'B','X', bx
+%macro DBG_SEP 0
+;        DBG_MARK ' '
+;        DBG_MARK '-'
+;        DBG_MARK ' '
+        DBG_MARK ':'
+%endmacro
+
+; Dump general 16-bit registers visible at the call site.
+; Preserves the caller's register values, but note that SP is the
+; value after macro entry pushes, so use DBG_REG16 'S','P', sp
+; manually if exact SP-at-point is not critical.
+%macro DBG_DUMP_GPRS 0
+        DBG_REG16 'A','X', ax
+        DBG_SEP
+        DBG_REG16 'B','X', bx
+        DBG_SEP
+        DBG_REG16 'C','X', cx
+        DBG_SEP
+        DBG_REG16 'D','X', dx
+        DBG_SEP
+        DBG_REG16 'S','I', si
+        DBG_SEP
+        DBG_REG16 'D','I', di
+        DBG_SEP
+        DBG_REG16 'B','P', bp
+%endmacro
+
+; Dump segment registers visible at the call site.
+%macro DBG_DUMP_SEGS 0
+        DBG_REG16 'C','S', cs
+        DBG_SEP
+        DBG_REG16 'D','S', ds
+        DBG_SEP
+        DBG_REG16 'E','S', es
+        DBG_SEP
+        DBG_REG16 'S','S', ss
 %endmacro
 
 %else
 
 %macro DBG_MARK 1
+%endmacro
+
+%macro DBG_HEX8 1
+%endmacro
+
+%macro DBG_HEX16 1
+%endmacro
+
+%macro DBG_REG16 3
+%endmacro
+
+%macro DBG_SEP 0
+%endmacro
+
+%macro DBG_DUMP_GPRS 0
+%endmacro
+
+%macro DBG_DUMP_SEGS 0
 %endmacro
 
 %endif
@@ -519,9 +1172,61 @@ exit_request:
 		pop	ds
 		retf
 ; ───────────────────────────────────────────────────────────────────────────
+; Helped to debug stack problem but are not required and are suboptimal 
+; enable_trans:
+;		mov	al, 1
+;		out	0E0h, al
+;		retn
+
+;disable_trans:		
+;		xor	al, al
+;		out	0E0h, al
+;		retn
+
+%macro ENABLE_TRANS 0
+        mov     al, 1
+        out     0E0h, al
+%endmacro
+
+%macro DISABLE_TRANS 0
+        xor     al, al
+        out     0E0h, al
+%endmacro
+
+; ───────────────────────────────────────────────────────────────────────────
+
+driver_old_ss dw 0
+driver_old_sp dw 0					
+driver_old_ax dw 0					
+driver_stack  times 64 dw 0 ; Hope it is enough 
+driver_stack_top:
+
+%macro SWITCH_TO_DRIVER_STACK 0
+        cli
+
+        mov     [cs:driver_old_ss], ss
+        mov     [cs:driver_old_sp], sp
+        mov     [cs:driver_old_ax], ax
+
+        mov     ax, cs
+        mov     ss, ax
+        mov     sp, driver_stack_top
+		
+		mov     ax, [cs:driver_old_ax]
+%endmacro
+
+
+%macro RESTORE_CALLER_STACK 0
+        cli
+
+        mov     ax, [cs:driver_old_ss]
+        mov     ss, ax
+        mov     sp, [cs:driver_old_sp]
+%endmacro
+				
 
 int67_hndl:				
-		cli
+		SWITCH_TO_DRIVER_STACK
 		push	ds  ; At dispatcher call time, before jmp [bx]:
 					; [bp+00] - BP
 					; [bp+02] - DI
@@ -552,7 +1257,7 @@ int67_hndl:
 ;		DBG_MARK 'G'
 		jnz	short short_exit_int67
 ;		DBG_MARK 'H'
-		xchg	al, ah		; ; Subfunction, or page number for AH=44h MAP MEMORY, from AL into AH
+		xchg	al, ah		; Subfunction, or page number for AH=44h MAP MEMORY, from AL into AH
 		mov	cl, ah
 		and	al, 0Fh
 		shl	al, 1
@@ -561,8 +1266,7 @@ int67_hndl:
 		mov	bp, sp
 ;		DBG_MARK 'I'
 		jmp	word [bx]	; Dispatch by function number.
-					; CL --	ex-AH, EMS function
-					; CH --	ex-AL, subfunction or page
+					; CL --	ex-AL, EMS function
 ; ───────────────────────────────────────────────────────────────────────────
 
 short_exit_int67:			
@@ -682,9 +1386,25 @@ set_all_pages:
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
+dbg_calls4 dw 0;
+
 EMS_fn04:				; Map/Unmap Handle Page
 		DBG_MARK '4'		
-		cmp	cl, 3		; AH = 44h
+		; Leaving this code as an example of deep debug 
+;		push ax
+;		push dx
+;		push bx 
+;		inc  [cs:dbg_calls4]
+;		mov  ax, [cs:dbg_calls4]
+;		mov  dx, [bp+6] ; DX on int 67h call
+;		mov  bx, [bp+0Ah] ; BX on int 67h call
+;		DBG_DUMP_GPRS
+;		pop  bx 
+;		pop  dx
+;		pop  ax
+		
+		cmp	cl, 3	; On call: AL -> CL
+					; AH = 44h, 
 					; AL = physical	page number (0-3)
 					; BX = logical page number
 					; or FFFFh to unmap (QEMM)
@@ -987,6 +1707,8 @@ exit_int67_handler_err:
 
 exit_int67_handler:			
 		DBG_MARK 'Z'
+		mov [cs:int67_ret_ax], ax
+		
 		pop	bp
 		pop	di
 		pop	si
@@ -995,9 +1717,14 @@ exit_int67_handler:
 		pop	bx
 		pop	es
 		pop	ds
+		
+		RESTORE_CALLER_STACK 
+		mov ax, [cs:int67_ret_ax]
 ;		assume ds:nothing
 		iret
 ; ───────────────────────────────────────────────────────────────────────────
+int67_ret_ax dw 0
+
 
 calc_free_pages:			
 		mov	di, EMS_logic_pages_tbl
@@ -1012,7 +1739,7 @@ cont_calc_freepg:
 not_free_page1:			
 		inc	bl
 		inc	bl
-		cmp	bl, 36h	; 36h/2 = 18h = 27, last element
+		cmp	bl, 36h	; 36h/2 = 1Bh = 27, last element
 		jbe	short cont_calc_freepg
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
@@ -1110,8 +1837,11 @@ To_next_handler2:
 		jz	short we_found_entry1
 		inc	bl
 		inc	bl
-		cmp	bl, 36h	; '6'   ; 2*1Bh
+		cmp	bl, 36h	; 2*1Bh
 		jbe	short To_next_handler2
+		DBG_MARK 'N'
+		; mov ah, 8Ah
+        ; jmp exit_int67_handler
 		retn
 ; ───────────────────────────────────────────────────────────────────────────
 
@@ -1120,8 +1850,9 @@ we_found_entry1:
 		mov	ah, bl		; AH - page index
 		
 		mov	bl, al		; BL - destination slot
-		mov	al, 1
-		out	0E0h, al	; Map Juko additional memory
+		ENABLE_TRANS    ; Map Juko additional memory
+;		mov	al, 1
+;		out	0E0h, al	
 		mov	al, bl		; AL - destination slot
 		xor	bx, bx
 
@@ -1186,8 +1917,9 @@ found_free_slot:
 		rep movsw		; Copy data from backing memory	to EMS slot
 
 		mov	bl, al
-		xor	al, al
-		out	0E0h, al	; Return traditional mapping
+		DISABLE_TRANS ; Return traditional mapping
+		; xor	al, al
+		; out	0E0h, al	
 		mov	al, bl
 		mov	di, EMS_logic_pages_tbl
 		mov	cx, cs
@@ -1279,14 +2011,14 @@ loc_5BD:
 check_handler:				
 		or	dx, dx
 		jnz	short loc_5D0
-		mov	ah, 83h	; 'Г'   ; The memory manager can not find the handle specified.
+		mov	ah, 83h	; The memory manager can not find the handle specified.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
 loc_5D0:				
 		cmp	dx, 18h
 		jbe	short loc_5DA
-		mov	ah, 83h	; 'Г'   ; The memory manager can not find the handle specified.
+		mov	ah, 83h	; The memory manager can not find the handle specified.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
@@ -1305,10 +2037,10 @@ check_next_entry:
 loc_5ED:				
 		inc	bx
 		inc	bx
-		cmp	bx, 36h	; '6'   ; Check all the table
+		cmp	bx, 36h	; Check all the table
 		jbe	short check_next_entry
 		pop	ax
-		mov	ah, 83h	; 'Г'   ; The memory manager can not find the handle specified.
+		mov	ah, 83h	; The memory manager can not find the handle specified.
 		jmp	exit_int67_handler
 ; ───────────────────────────────────────────────────────────────────────────
 
@@ -1572,21 +2304,26 @@ is_86_88:
 		mov	ax, 7000h
 		mov	ds, ax
 ;		assume ds:nothing
-		xor	al, al
-		out	0E0h, al	; Standard mapping
+		; xor	al, al
+		; out	0E0h, al	; Standard mapping
+		DISABLE_TRANS  ; Standard mapping
 		mov	word [ds:0FFFEh], 6996h ; Last word of the 128 Kb area + mapped 384 Kb
-		inc	al
-		out	0E0h, al	; Map additional memory
+		; inc	al
+		; out	0E0h, al	; Map additional memory
+		ENABLE_TRANS        ; Map additional memory
 		mov	word [ds:0FFFEh], 9669h
-		xor	al, al
-		out	0E0h, al	; Standard mapping
+		; xor	al, al
+		; out	0E0h, al	; Standard mapping
+		DISABLE_TRANS  ; Standard mapping
 		cmp	word [ds:0FFFEh], 6996h
 		jnz	short mapping_does_not_work
-		inc	al
-		out	0E0h, al	; Map additional memory / alternate mapping 
+		; inc	al
+		; out	0E0h, al	; Map additional memory / alternate mapping 
+		ENABLE_TRANS        ; Map additional memory  / alternate mapping 
 		cmp	word [ds:0FFFEh], 9669h
-		mov	al, 0
-		out	0E0h, al
+		; mov	al, 0
+		; out	0E0h, al
+		DISABLE_TRANS  ; Standard mapping
 		jnz	short mapping_does_not_work
 		xor	ax, ax
 		mov	ds, ax
