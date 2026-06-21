@@ -58,7 +58,26 @@ old_int21_offs	dd 0
 do_call_orig_int21 db 0
 temp_phys_EMS_slot dw 0		
 
+; Reboot detection modes used during driver initialization.
+; Add new modes by assigning a new DETECT_* value and extending
+; is_upper64_reserved / write_reboot_detection_marker.
+DETECT_BANKED_MARKER equ 0    ; marker in Juko banked memory, requires ENABLE_TRANS
+DETECT_PLAIN_MARKER  equ 1    ; marker in normal memory, no bank switch
+DETECT_BDA_SIZE      equ 2    ; no marker; use BIOS Data Area memory size [0:413]
+DETECT_86BOX_E0_BIT  equ 3    ; 86Box-only: reboot marker in bit 7 of port E0h
+DETECT_MODE_MAX      equ 3
+
+REBOOT_MARKER        equ 6996h
+REBOOT_MARKER_SEG    equ 7000h
+REBOOT_MARKER_OFF    equ 0000h
+
+JUKO_E0_PORT         equ 0E0h
+JUKO_E0_TRANS_BIT    equ 01h
+JUKO_E0_REBOOT_BIT   equ 80h
+
 mem_dispos_kb      dw 0
+detect_mode        db DETECT_BDA_SIZE
+detect_mode_pad    db 0
 ems_frame_base_seg dw 9000h
 	
 segs_for_EMS_frames dw 9000h, 9400h, 9800h, 9C00h
@@ -1172,13 +1191,49 @@ exit_request:
 		retf
 ; ───────────────────────────────────────────────────────────────────────────
 %macro ENABLE_TRANS 0
-        mov     al, 1
-        out     0E0h, al
+        pushf
+        cmp     byte [cs:detect_mode], DETECT_86BOX_E0_BIT
+        jne     %%normal_enable
+
+        ; 86Box-only E0 marker mode:
+        ; keep bit 7 intact while changing the translation bit.
+        push    dx
+        mov     dx, JUKO_E0_PORT
+        in      al, dx
+        or      al, JUKO_E0_TRANS_BIT
+        out     dx, al
+        pop     dx
+        jmp     short %%done
+
+%%normal_enable:
+        mov     al, JUKO_E0_TRANS_BIT
+        out     JUKO_E0_PORT, al
+
+%%done:
+        popf
 %endmacro
 
 %macro DISABLE_TRANS 0
+        pushf
+        cmp     byte [cs:detect_mode], DETECT_86BOX_E0_BIT
+        jne     %%normal_disable
+
+        ; 86Box-only E0 marker mode:
+        ; keep bit 7 intact while clearing the translation bit.
+        push    dx
+        mov     dx, JUKO_E0_PORT
+        in      al, dx
+        and     al, 0FEh
+        out     dx, al
+        pop     dx
+        jmp     short %%done
+
+%%normal_disable:
         xor     al, al
-        out     0E0h, al
+        out     JUKO_E0_PORT, al
+
+%%done:
+        popf
 %endmacro
 
 ; ───────────────────────────────────────────────────────────────────────────
@@ -2318,21 +2373,11 @@ install_int_handlers:
 		jmp exit_on_error; short
 
 we_are_lo_enough:		
-		mov ax, 7000h ; 7000h
-		mov	ds, ax
-;		assume ds:nothing
-        ENABLE_TRANS
-		; mov 	ax, word [ds:0FFF0h]
-		mov 	bx, word [ds:0]
-        DISABLE_TRANS
-        cmp     bx, 6996h ;
+        call    is_upper64_reserved
         jz      short we_have_upper_64Kb ; The upper 64 Kb has already been reserved
 
-        ENABLE_TRANS
-        mov     word [ds:0], 6996h
-        DISABLE_TRANS
+        call    write_reboot_detection_marker
 
-	
 		xor	ax, ax
 		mov	ds, ax
 ;		assume ds:seg000
@@ -2352,6 +2397,8 @@ we_are_lo_enough:
 		; jmp     0F000h:0FFF0h
 
 we_have_upper_64Kb:		
+        call    consume_reboot_detection_marker
+
         ; xor     ax, ax
         ; mov     ds, ax
         ; mov     ax, [413h]
@@ -2376,6 +2423,152 @@ we_have_upper_64Kb:
 		mov	dx, aSuccessfullyInsta ;	"\nSuccessfully	installed: now you have	3"...
 		int	21h		; DOS -
 		jmp	exit_request
+
+; ------------------------------------------------------------
+; is_upper64_reserved
+;
+; Tests whether the reboot/reserve step has already happened.
+; Selection is controlled by [cs:detect_mode].
+;
+; Output:
+;   ZF=1: upper 64 Kb is considered already reserved
+;   ZF=0: reserve-and-reboot step is still needed
+;
+; Destroys:
+;   AX,BX,DS
+; ------------------------------------------------------------
+
+is_upper64_reserved:
+        mov     al, [cs:detect_mode]
+
+        cmp     al, DETECT_BANKED_MARKER
+        je      short .banked_marker
+
+        cmp     al, DETECT_PLAIN_MARKER
+        je      short .plain_marker
+
+        cmp     al, DETECT_BDA_SIZE
+        je      short .bda_size
+
+        cmp     al, DETECT_86BOX_E0_BIT
+        je      short .e0_bit
+
+        ; Unknown mode: fall back to the current/default behavior.
+.banked_marker:
+        mov     ax, REBOOT_MARKER_SEG
+        mov     ds, ax
+        ENABLE_TRANS
+        mov     bx, [REBOOT_MARKER_OFF]
+        DISABLE_TRANS
+        cmp     bx, REBOOT_MARKER
+        retn
+
+.plain_marker:
+        mov     ax, [cs:ems_frame_base_seg]
+        mov     ds, ax
+        mov     bx, [REBOOT_MARKER_OFF]
+        cmp     bx, REBOOT_MARKER
+        retn
+
+.bda_size:
+        xor     ax, ax
+        mov     ds, ax
+        mov     ax, [413h]
+        mov     bx, 640
+        sub     bx, [cs:mem_dispos_kb]
+        sub     bx, 64
+        cmp     ax, bx
+        retn
+
+.e0_bit:
+        ; 86Box-specific mode.  The emulator must implement readback
+        ; of the Juko E0h latch and keep bit 7 across the requested reboot.
+        mov     dx, JUKO_E0_PORT
+        in      al, dx
+        and     al, JUKO_E0_REBOOT_BIT
+        cmp     al, JUKO_E0_REBOOT_BIT
+        retn
+
+; ------------------------------------------------------------
+; write_reboot_detection_marker
+;
+; Stores the reboot marker if the selected detection mode needs one.
+; For DETECT_BDA_SIZE no marker is written.
+;
+; Destroys:
+;   AX,DS
+; ------------------------------------------------------------
+
+write_reboot_detection_marker:
+        mov     al, [cs:detect_mode]
+
+        cmp     al, DETECT_BANKED_MARKER
+        je      short .write_banked_marker
+
+        cmp     al, DETECT_PLAIN_MARKER
+        je      short .write_plain_marker
+
+        cmp     al, DETECT_BDA_SIZE
+        je      short .no_marker
+
+        cmp     al, DETECT_86BOX_E0_BIT
+        je      short .write_e0_bit
+
+        ; Unknown mode: fall back to the current/default behavior.
+        jmp     short .write_banked_marker
+
+.no_marker:
+        retn
+
+.write_banked_marker:
+        mov     ax, REBOOT_MARKER_SEG
+        mov     ds, ax
+        ENABLE_TRANS
+        mov     word [REBOOT_MARKER_OFF], REBOOT_MARKER
+        DISABLE_TRANS
+        retn
+
+.write_plain_marker:
+        mov     ax, [cs:ems_frame_base_seg]
+        mov     ds, ax
+        mov     word [REBOOT_MARKER_OFF], REBOOT_MARKER
+        retn
+
+.write_e0_bit:
+        ; Store the reboot marker in bit 7 of the 86Box Juko E0h latch.
+        ; Keep bit 0 cleared so the normal memory map is active before reboot.
+        mov     dx, JUKO_E0_PORT
+        in      al, dx
+        and     al, 0FEh
+        or      al, JUKO_E0_REBOOT_BIT
+        out     dx, al
+        retn
+
+; ------------------------------------------------------------
+; consume_reboot_detection_marker
+;
+; Clears one-shot markers after they have served their purpose.
+; At present this is needed only for the 86Box E0h-bit mode, otherwise
+; a later reboot could see a stale bit 7 and skip the reserve step.
+;
+; Destroys:
+;   AX,DX
+; ------------------------------------------------------------
+
+consume_reboot_detection_marker:
+        mov     al, [cs:detect_mode]
+        cmp     al, DETECT_86BOX_E0_BIT
+        jne     short .done
+
+        mov     dx, JUKO_E0_PORT
+        in      al, dx
+        and     al, 07Eh             ; clear bit 7 marker and bit 0 translation
+        out     dx, al
+
+        ; From now on, runtime EMS mapping must use plain OUT 1 / OUT 0.
+        mov     byte [cs:detect_mode], DETECT_BANKED_MARKER
+.done:
+        retn
 		
 ; ------------------------------------------------------------
 ; input:
@@ -2395,7 +2588,10 @@ build_mem_layout:
         mov ax, [cs:mem_dispos_kb]
         cmp ax, 64
         ja  bad_mem_dispos_config
-
+		
+        mov cl, 6 ; AX = mem_dispos_kb * 64 = 2^6 paragraphs
+        shl ax, cl
+		
         mov bx, 9000h
         sub bx, ax                      ; BX = first EMS frame slot segment
         mov [cs:ems_frame_base_seg], bx
@@ -2426,9 +2622,11 @@ bad_mem_dispos_config:
 INIT_CMDLINE_PTR_OFF equ 12h     ; DOS 3.x+ init packet command-line pointer,
 
 ; ------------------------------------------------------------
-; Default = /D:0
-; 
-; Accept:
+; Defaults:
+;   /D:0
+;   /M:1
+;
+; Accept displacement:
 ;   /D:0
 ;   /D=1
 ;   /D4
@@ -2436,8 +2634,15 @@ INIT_CMDLINE_PTR_OFF equ 12h     ; DOS 3.x+ init packet command-line pointer,
 ;   -D:2
 ;   -D=0
 ;
+; Accept reboot detection mode:
+;   /M:0 or /R:0   banked-memory marker, current/default behavior
+;   /M:1 or /R:1   plain-memory marker, no bank switch
+;   /M:2 or /R:2   BIOS Data Area size [0:413]
+;   /M:3 or /R:3   86Box-only marker in bit 7 of port E0h
+;
 ; Result:
 ;   [cs:mem_dispos_kb] = 0..64
+;   [cs:detect_mode]   = 0..DETECT_MODE_MAX
 ;
 ; CF=0 ok, CF=1 bad config.
 ; ------------------------------------------------------------
@@ -2480,20 +2685,21 @@ parse_mem_dispos_config:
         mov al, [es:si]
         inc si
         and al, 0DFh                    ; uppercase
+
         cmp al, 'D'
-        jne .scan
+        je  .parse_d_option
 
-        mov al, [es:si]
-        cmp al, ':'
-        je  .skip_sep
-        cmp al, '='
-        je  .skip_sep
-        jmp .parse_number               
+        cmp al, 'M'
+        je  .parse_mode_option
 
-.skip_sep:
-        inc si
+        cmp al, 'R'                     ; alias: reboot-detection mode
+        je  .parse_mode_option
 
-.parse_number:
+        jmp .scan
+
+.parse_d_option:
+        call skip_optional_separator_es_si
+
         call parse_uint_es_si            ; AX=value, CF=0 if at least one digit
         jc   .bad
 
@@ -2501,7 +2707,19 @@ parse_mem_dispos_config:
         ja  .bad
 
         mov [cs:mem_dispos_kb], ax
-        jmp .ok
+        jmp .scan
+
+.parse_mode_option:
+        call skip_optional_separator_es_si
+
+        call parse_uint_es_si            ; AX=value, CF=0 if at least one digit
+        jc   .bad
+
+        cmp ax, DETECT_MODE_MAX
+        ja  .bad
+
+        mov [cs:detect_mode], al
+        jmp .scan
 
 .ok_default:
 .ok:
@@ -2519,6 +2737,32 @@ parse_mem_dispos_config:
         pop bx
         pop ax
         retn		
+
+; ------------------------------------------------------------
+; Skip optional ':' or '=' after an option letter.
+;
+; input/output:
+;   ES:SI -> option value, or unchanged if no separator is present
+;
+; preserves:
+;   AX
+; ------------------------------------------------------------
+
+skip_optional_separator_es_si:
+        push ax
+
+        mov al, [es:si]
+        cmp al, ':'
+        je  short .skip
+        cmp al, '='
+        jne short .done
+
+.skip:
+        inc si
+
+.done:
+        pop ax
+        retn
 
 ; ------------------------------------------------------------
 ; Parse unsigned decimal number at ES:SI.
@@ -2629,5 +2873,6 @@ aTooHighTRSAddr	db 0Ah
 		db 0Dh,'$'
 
 aBadConfig db 0Ah
-        db 'Bad IJUKOEMM configuration. Use /D:0../D:64.',0Ah,0Ah,0Ah,0Dh,'$'		
+        db 'Bad IJUKOEMM configuration. Use /D:0../D:64 and /M:0../M:2.',0Ah
+        db 'M/R modes: 0=banked marker, 1=plain marker, 2=BDA size.',0Ah,0Ah,0Dh,'$'		
 		
