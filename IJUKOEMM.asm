@@ -2318,12 +2318,21 @@ install_int_handlers:
 		jmp exit_on_error; short
 
 we_are_lo_enough:		
-		mov ax, [cs:ems_frame_base_seg]
+		mov ax, 7000h ; 7000h
 		mov	ds, ax
 ;		assume ds:nothing
-		cmp	word [ds:0], 6996h
-		jz	short we_have_upper_64Kb ; The upper 64 Kb has already been reserved
-		mov	word [ds:0], 6996h		
+        ENABLE_TRANS
+		; mov 	ax, word [ds:0FFF0h]
+		mov 	bx, word [ds:0]
+        DISABLE_TRANS
+        cmp     bx, 6996h ;
+        jz      short we_have_upper_64Kb ; The upper 64 Kb has already been reserved
+
+        ENABLE_TRANS
+        mov     word [ds:0], 6996h
+        DISABLE_TRANS
+
+	
 		xor	ax, ax
 		mov	ds, ax
 ;		assume ds:seg000
@@ -2334,9 +2343,20 @@ we_are_lo_enough:
         jb  is_186_or_above
 		sub bx, 64 
 		mov	word [413h], bx;	Cut to 640-mem_dispos_kb-64
+		
+        mov word [0472h], 1234h
+		
 		int	19h		; Soft reboot -- reinit	BIOS for new mem size
+		; cli 
+		; cld 
+		; jmp     0F000h:0FFF0h
 
 we_have_upper_64Kb:		
+        ; xor     ax, ax
+        ; mov     ds, ax
+        ; mov     ax, [413h]
+        ; DBG_REG16 'M','M', ax
+		
 		mov	bx, [cs:ReqBlock_Off]
 		mov	es, [cs:ReqBlock_Seg]
 		xor	ax, ax
