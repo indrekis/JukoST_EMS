@@ -4,7 +4,7 @@
 
 The original driver was written by **George Lefterov**, as indicated by the original banner string. This project is based on a decrypted binary, IDA disassembly, and a manually cleaned NASM reconstruction.
 
-To debug the driver, I patched 86Box locally to emulate the Juko ST bank switching; I hope to submit this as a pull request.
+To debug the driver, I patched 86Box to emulate the Juko ST bank switching; corresponding [pull request](https://github.com/86Box/86Box/pull/7322) was just merged to upstream.
 
 The goal of this project is to understand, preserve, and make usable the original Juko ST memory-expansion logic on real hardware and in emulators such as 86Box.
 
@@ -79,6 +79,7 @@ To change the memory size, use configuration option ``/D:nn`` -- see details abo
    - ``/M:2`` -- does not uses flags, relies on the [0:413h] contents.
    - ``/M:3`` -- strictly experimental, for the 86Box. Does not work on real hardware. 
    - **Note**: for some reason, all methods above does not work under the modified 86Box for DOS 5.00 and DOS 6.22 -- value in the [0:413h] is reverted to its defaults, though do work for the DOS 3.31...
+   - **Note**: For DOS 6.22, if using the boot menu, it will be shown twice.
 
 Several more or less small fixes were made:
 
