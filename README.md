@@ -75,10 +75,10 @@ To change the memory size, use configuration option ``/D:nn`` -- see details abo
 
 - Added selection of the detection of the already reserved page frame at the upper part of the conventional memory. Use option ``/M:n``, where:
    - ``/M:0`` -- use banked memory for a flag. Unreliable -- often requires power off to work. 
-   - ``/M:1`` -- user ordinary memory for the flag. Method used by all previos versions.
+   - ``/M:1`` -- user plain conventional memory for the flag. Method used by all previous versions.
    - ``/M:2`` -- does not uses flags, relies on the [0:413h] contents.
    - ``/M:3`` -- strictly experimental, for the 86Box. Does not work on real hardware. 
-   - **Note**: for some reason, all methods above does not work under the 86Box for DOS 5.00 and DOS 6.22 though do work for the DOS 3.31...
+   - **Note**: for some reason, all methods above does not work under the modified 86Box for DOS 5.00 and DOS 6.22 -- value in the [0:413h] is reverted to its defaults, though do work for the DOS 3.31...
 
 Several more or less small fixes were made:
 
@@ -88,6 +88,7 @@ Several more or less small fixes were made:
 - Instruction ``cld`` added before the ``rep movsw`` -- I hope it is required because AFAIK no calling convention ensures this flag state.
 - Int 67h handler switches to its own stack -- using current stack of the calling software is a major bug, because sometimes stack is in the switched memory region.
 
+**Note**: MEM.EXE requires EMS 4.0, so does not sees our EMS. 
 
 ## Technical details 
 
