@@ -71,8 +71,14 @@ Several small features were added:
 - Two types of debug support -- for the [86Box ISABugger debug facility](https://86box.readthedocs.io/en/latest/hardware/isabugger.html) and by writing directly to video memory. Supported are text mode (using the B800:0000), CGA and VGA mode 13h. Graphical debug output code, including the custom font were mostly AI-generated, though tested. This is auxiliary code, absent from the production build. Current end of the debug text ring buffer is marked by a rectangle, registers printing added.
 
 - Added dynamic support for systems with slightly less than exactly 640 Kb conventional memory available. This is important, e.g. for the XT IDE, requiring 1 Kb RAM for its needs and leaving 639 Kb for the DOS.  
-
 To change the memory size, use configuration option ``/D:nn`` -- see details above.
+
+- Added selection of the detection of the already reserved page frame at the upper part of the conventional memory. Use option ``/M:n``, where:
+   - ``/M:0`` -- use banked memory for a flag. Unreliable -- often requires power off to work. 
+   - ``/M:1`` -- user ordinary memory for the flag. Method used by all previos versions.
+   - ``/M:2`` -- does not uses flags, relies on the [0:413h] contents.
+   - ``/M:3`` -- strictly experimental, for the 86Box. Does not work on real hardware. 
+   - **Note**: for some reason, all methods above does not work under the 86Box for DOS 5.00 and DOS 6.22 though do work for the DOS 3.31...
 
 Several more or less small fixes were made:
 
